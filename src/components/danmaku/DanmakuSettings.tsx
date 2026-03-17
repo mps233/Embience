@@ -53,7 +53,7 @@ export default function DanmakuSettings() {
       </DropdownMenuTrigger>
       
       <DropdownMenuContent 
-        className="w-72 rounded-2xl border shadow-2xl z-50"
+        className="w-72 rounded-2xl border shadow-2xl z-50 p-0"
         style={{
           background: 'rgba(0, 0, 0, 0.75)',
           backdropFilter: 'blur(40px) saturate(180%)',
@@ -62,11 +62,11 @@ export default function DanmakuSettings() {
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) inset',
         }}
       >
-        <DropdownMenuLabel className="text-white/95 text-sm font-semibold px-4 py-3 -m-1" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>弹幕设置</DropdownMenuLabel>
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
+        <DropdownMenuLabel className="text-white/95 text-sm font-semibold px-4 py-3" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>弹幕设置</DropdownMenuLabel>
+        <DropdownMenuSeparator className="my-0" style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
 
         {/* 透明度 */}
-        <div className="px-3 py-3">
+        <div className="px-4 py-3">
           <label className="text-sm text-white/90 mb-2 block">
             透明度: {settings.opacity}%
           </label>
@@ -90,10 +90,10 @@ export default function DanmakuSettings() {
           />
         </div>
 
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
+        <DropdownMenuSeparator className="my-0" style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
 
         {/* 滚动速度 */}
-        <div className="px-3 py-3">
+        <div className="px-4 py-3">
           <label className="text-sm text-white/90 mb-2 block">
             滚动速度: {getSpeedLabel(settings.speed)} ({settings.speed}/10)
           </label>
@@ -124,10 +124,10 @@ export default function DanmakuSettings() {
           </div>
         </div>
 
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
+        <DropdownMenuSeparator className="my-0" style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
 
         {/* 字体大小 */}
-        <div className="px-3 py-3">
+        <div className="px-4 py-3">
           <label className="text-sm text-white/90 mb-2 block">
             字体大小: {settings.fontSize}px
           </label>
@@ -156,10 +156,10 @@ export default function DanmakuSettings() {
           </div>
         </div>
 
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
+        <DropdownMenuSeparator className="my-0" style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
 
         {/* 显示区域 */}
-        <div className="px-3 py-3">
+        <div className="px-4 py-3">
           <label className="text-sm text-white/90 mb-2 block">
             显示区域: {settings.displayArea}% (从顶部开始)
           </label>
