@@ -365,6 +365,11 @@ export class MediaService {
       queryParams.SearchTerm = params.searchTerm
     }
 
+    // 流派过滤
+    if (params.genres) {
+      queryParams.Genres = params.genres
+    }
+
     // 额外字段（合并默认字段）
     const fields = params.fields ? [...defaultFields, ...params.fields] : defaultFields
     queryParams.Fields = fields.join(',')

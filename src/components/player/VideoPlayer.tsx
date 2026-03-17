@@ -14,6 +14,9 @@ import { createProgressTracker } from '@/services/player/progressTracker'
 import { createEmbyClient } from '@/services/api/embyClient'
 import { usePlayerStore } from '@/stores/playerStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useDanmakuStore } from '@/stores/danmakuStore'
+import { useDanmaku } from '@/hooks/useDanmaku'
+import { DanmakuCanvas, DanmakuSettings, DanmakuInput } from '@/components/danmaku'
 import { 
   Play, 
   Pause, 
@@ -26,7 +29,8 @@ import {
   Settings,
   Languages,
   AudioLines,
-  RectangleHorizontal
+  RectangleHorizontal,
+  MessageSquare
 } from 'lucide-react'
 
 /**
@@ -174,6 +178,22 @@ export function VideoPlayer({
   // 字幕和音轨菜单显示状态
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false)
   const [showAudioMenu, setShowAudioMenu] = useState(false)
+  const [showDanmakuInput, setShowDanmakuInput] = useState(false)
+  
+  // 弹幕功能
+  const { settings: danmakuSettings, updateSettings: updateDanmakuSettings } = useDanmakuStore()
+  const {
+    episodeId,
+    danmakuList,
+    isMatching,
+    isLoadingDanmaku,
+    hasDanmaku,
+    sendDanmaku,
+    isSendingDanmaku,
+  } = useDanmaku({
+    mediaItem,
+    enabled: danmakuSettings.enabled,
+  })
   
   // 错误状态
   const [error, setError] = useState<string | null>(null)
@@ -911,17 +931,39 @@ export function VideoPlayer({
   // 点击外部关闭菜单
   useEffect(() => {
     const handleClickOutside = () => {
-      if (showSubtitleMenu || showAudioMenu) {
+      if (showSubtitleMenu || showAudioMenu || showDanmakuInput) {
         setShowSubtitleMenu(false)
         setShowAudioMenu(false)
+        setShowDanmakuInput(false)
       }
     }
 
-    if (showSubtitleMenu || showAudioMenu) {
+    if (showSubtitleMenu || showAudioMenu || showDanmakuInput) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showSubtitleMenu, showAudioMenu])
+  }, [showSubtitleMenu, showAudioMenu, showDanmakuInput])
+
+  // 处理发送弹幕
+  const handleSendDanmaku = async (text: string, color: string, type: any) => {
+    try {
+      await sendDanmaku({
+        text,
+        color,
+        type,
+        time: currentTime,
+      })
+      console.log('弹幕发送成功')
+    } catch (error) {
+      console.error('弹幕发送失败:', error)
+      throw error
+    }
+  }
+
+  // 切换弹幕显示
+  const toggleDanmaku = () => {
+    updateDanmakuSettings({ enabled: !danmakuSettings.enabled })
+  }
 
   return (
     <div 
@@ -971,6 +1013,30 @@ export function VideoPlayer({
           }}
         />
         
+        {/* 弹幕 Canvas - 覆盖在视频上方 */}
+        {danmakuSettings.enabled && hasDanmaku && (
+          <DanmakuCanvas
+            key={aspectRatioMode} // 添加 key，切换宽高比时重新挂载
+            currentTime={currentTime}
+            isPaused={!isPlaying}
+            videoRef={videoRef}
+          />
+        )}
+        
+        {/* 弹幕加载提示 */}
+        {danmakuSettings.enabled && (isMatching || isLoadingDanmaku) && (
+          <div className="absolute top-4 right-4 px-3 py-2 bg-black/70 text-white/80 text-sm rounded-lg backdrop-blur-sm">
+            正在加载弹幕...
+          </div>
+        )}
+        
+        {/* 无弹幕提示 */}
+        {danmakuSettings.enabled && !isMatching && !isLoadingDanmaku && !hasDanmaku && (
+          <div className="absolute top-4 right-4 px-3 py-2 bg-black/70 text-white/80 text-sm rounded-lg backdrop-blur-sm">
+            暂无弹幕
+          </div>
+        )}
+        
         {/* 中央播放按钮 - 只在暂停时显示 */}
         {!isPlaying && (
           <button
@@ -1007,17 +1073,33 @@ export function VideoPlayer({
             </div>
           </button>
         )}
+        
+        {/* 弹幕输入框 - 显示在视频底部 */}
+        {showDanmakuInput && danmakuSettings.enabled && hasDanmaku && (
+          <div className="absolute bottom-4 left-4 right-4 z-40">
+            <DanmakuInput
+              currentTime={currentTime}
+              onSend={handleSendDanmaku}
+            />
+          </div>
+        )}
       </div>
-      {/* 自定义控制栏 - 非全屏时在视频下方，全屏时覆盖在视频上方 */}
-      {!isFullscreen && (
-        <div 
-          className="w-full border-t" 
-          style={{ 
-            background: 'linear-gradient(to bottom, rgba(33, 34, 37, 0.98) 0%, rgba(37, 38, 41, 0.98) 100%)',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(12px)'
-          }}
-        >
+      {/* 统一控制栏 - 非全屏时在视频下方，全屏时覆盖在视频上方 */}
+      <div 
+        className={`w-full z-40 transition-all duration-300 ${
+          isFullscreen 
+            ? `absolute bottom-0 left-0 right-0 ${showControls ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}` 
+            : 'border-t'
+        }`}
+        style={isFullscreen ? { 
+          background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.7) 100%)',
+          backdropFilter: 'blur(8px)'
+        } : { 
+          background: 'linear-gradient(to bottom, rgba(33, 34, 37, 0.98) 0%, rgba(37, 38, 41, 0.98) 100%)',
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+          backdropFilter: 'blur(12px)'
+        }}
+      >
           {/* 进度条容器 - 全宽无内边距 */}
           <div className="py-2 px-6">
             <div className="relative group">
@@ -1162,6 +1244,41 @@ export function VideoPlayer({
               </div>
               {/* 右侧控制按钮 */}
               <div className="flex items-center gap-2">
+                {/* 弹幕切换按钮 */}
+                <button
+                  onClick={toggleDanmaku}
+                  className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
+                    danmakuSettings.enabled 
+                      ? 'bg-white/[0.2] text-white hover:bg-white/[0.25]' 
+                      : 'hover:bg-white/[0.1] text-white/85'
+                  }`}
+                  title={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
+                  aria-label={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
+                >
+                  <MessageSquare className="w-5 h-5" />
+                </button>
+
+                {/* 弹幕设置按钮 - 仅在弹幕启用时显示 */}
+                {danmakuSettings.enabled && (
+                  <DanmakuSettings />
+                )}
+
+                {/* 弹幕输入按钮 - 仅在弹幕启用且有弹幕时显示 */}
+                {danmakuSettings.enabled && hasDanmaku && (
+                  <button
+                    onClick={() => setShowDanmakuInput(!showDanmakuInput)}
+                    className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
+                      showDanmakuInput 
+                        ? 'bg-white/[0.2] text-white hover:bg-white/[0.25]' 
+                        : 'hover:bg-white/[0.1] text-white/85'
+                    }`}
+                    title="发送弹幕"
+                    aria-label="发送弹幕"
+                  >
+                    <MessageSquare className="w-5 h-5" fill={showDanmakuInput ? 'currentColor' : 'none'} />
+                  </button>
+                )}
+
                 {/* 字幕切换按钮 */}
                 <div className="relative">
                   <button
@@ -1310,300 +1427,7 @@ export function VideoPlayer({
             </div>
           </div>
         </div>
-      )}
       </div>
-      {/* 全屏时的控制栏 - 覆盖在视频上方，半透明背景 */}
-      {isFullscreen && (
-        <div 
-          className={`absolute bottom-0 left-0 right-0 w-full z-40 transition-all duration-300 ${
-            showControls ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
-          }`}
-          style={{ 
-            background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.7) 100%)',
-            backdropFilter: 'blur(8px)'
-          }}
-        >
-          {/* 进度条容器 - 全宽无内边距 */}
-          <div className="py-2 px-6">
-            <div className="relative group">
-              {/* 进度条背景 */}
-              <div className="h-1.5 bg-white/[0.12] rounded-full overflow-visible relative">
-                {/* 已播放进度 */}
-                <div 
-                  className="h-full rounded-full transition-all duration-200 relative overflow-visible pointer-events-none"
-                  style={{
-                    width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
-                    background: 'linear-gradient(90deg, rgba(248, 200, 220, 0.95) 0%, rgba(255, 244, 170, 0.95) 33%, rgba(216, 249, 208, 0.95) 66%, rgba(202, 215, 255, 0.95) 100%)',
-                    boxShadow: '0 0 20px rgba(248, 200, 220, 0.5), 0 0 8px rgba(255, 244, 170, 0.3)',
-                  }}
-                />
-              </div>
-              
-              {/* 进度条滑块 - 使用原生样式的抓手 */}
-              <input
-                type="range"
-                min="0"
-                max={duration || 0}
-                step="0.1"
-                value={currentTime}
-                onChange={handleProgressChange}
-                onMouseDown={handleProgressMouseDown}
-                onMouseUp={handleProgressMouseUp}
-                onTouchStart={handleProgressMouseDown}
-                onTouchEnd={handleProgressMouseUp}
-                className="absolute inset-0 w-full cursor-pointer appearance-none bg-transparent
-                  [&::-webkit-slider-thumb]:appearance-none
-                  [&::-webkit-slider-thumb]:w-4
-                  [&::-webkit-slider-thumb]:h-4
-                  [&::-webkit-slider-thumb]:rounded-full
-                  [&::-webkit-slider-thumb]:bg-white
-                  [&::-webkit-slider-thumb]:cursor-grab
-                  [&::-webkit-slider-thumb]:active:cursor-grabbing
-                  [&::-webkit-slider-thumb]:transition-all
-                  [&::-webkit-slider-thumb]:duration-200
-                  [&::-webkit-slider-thumb]:hover:scale-125
-                  [&::-webkit-slider-thumb]:active:scale-110
-                  [&::-moz-range-thumb]:appearance-none
-                  [&::-moz-range-thumb]:w-4
-                  [&::-moz-range-thumb]:h-4
-                  [&::-moz-range-thumb]:rounded-full
-                  [&::-moz-range-thumb]:bg-white
-                  [&::-moz-range-thumb]:border-0
-                  [&::-moz-range-thumb]:cursor-grab
-                  [&::-moz-range-thumb]:active:cursor-grabbing
-                  [&::-moz-range-thumb]:transition-all
-                  [&::-moz-range-thumb]:duration-200
-                  [&::-moz-range-thumb]:hover:scale-125
-                  [&::-moz-range-thumb]:active:scale-110"
-                style={{ 
-                  height: '24px', 
-                  top: '-8px',
-                  filter: 'drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 0 2px rgba(255, 255, 255, 0.8))'
-                }}
-              />
-            </div>
-          </div>
-          {/* 控制按钮栏 */}
-          <div className="px-6 py-2.5 flex items-center">
-            <div className="flex items-center justify-between gap-4 w-full">
-              {/* 左侧控制按钮 */}
-              <div className="flex items-center gap-3">
-                {/* 播放/暂停按钮 */}
-                <button
-                  onClick={handlePlayButtonClick}
-                  className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
-                >
-                  {isPlaying ? (
-                    <Pause className="w-6 h-6 text-white" fill="currentColor" />
-                  ) : (
-                    <Play className="w-6 h-6 text-white ml-0.5" fill="currentColor" />
-                  )}
-                </button>
-
-                {/* 快退按钮 */}
-                <button
-                  onClick={handleSkipBackward}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
-                  title="后退 10 秒"
-                >
-                  <SkipBack className="w-5 h-5 text-white/85" />
-                </button>
-
-                {/* 快进按钮 */}
-                <button
-                  onClick={handleSkipForward}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
-                  title="前进 10 秒"
-                >
-                  <SkipForward className="w-5 h-5 text-white/85" />
-                </button>
-
-                {/* 音量控制 */}
-                <div className="flex items-center gap-2 group">
-                  <button
-                    onClick={toggleMute}
-                    className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
-                  >
-                    {isMuted || volume === 0 ? (
-                      <VolumeX className="w-5 h-5 text-white/85" />
-                    ) : (
-                      <Volume2 className="w-5 h-5 text-white/85" />
-                    )}
-                  </button>
-
-                  {/* 音量滑块 */}
-                  <div className="relative w-0 group-hover:w-24 transition-all duration-300 overflow-hidden">
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={volume}
-                      onChange={handleVolumeChange}
-                      className="w-full h-1 bg-white/[0.15] rounded-full appearance-none cursor-pointer
-                        [&::-webkit-slider-thumb]:appearance-none
-                        [&::-webkit-slider-thumb]:w-3
-                        [&::-webkit-slider-thumb]:h-3
-                        [&::-webkit-slider-thumb]:rounded-full
-                        [&::-webkit-slider-thumb]:bg-white
-                        [&::-webkit-slider-thumb]:cursor-pointer
-                        [&::-webkit-slider-thumb]:shadow-[0_2px_8px_rgba(0,0,0,0.3)]
-                        [&::-webkit-slider-thumb]:transition-transform
-                        [&::-webkit-slider-thumb]:hover:scale-110"
-                      style={{
-                        background: `linear-gradient(to right, 
-                          rgba(248, 200, 220, 0.9) 0%, 
-                          rgba(255, 244, 170, 0.9) ${volume}%, 
-                          rgba(255, 255, 255, 0.15) ${volume}%, 
-                          rgba(255, 255, 255, 0.15) 100%)`
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* 时间显示 */}
-                <div className="text-white/80 text-sm font-medium ml-2 tracking-tight tabular-nums">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </div>
-              </div>
-              {/* 右侧控制按钮 */}
-              <div className="flex items-center gap-2">
-                {/* 字幕切换按钮 */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowSubtitleMenu(!showSubtitleMenu)}
-                    className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
-                      selectedSubtitleTrack >= 0 
-                        ? 'bg-white/[0.2] text-white hover:bg-white/[0.25]' 
-                        : 'hover:bg-white/[0.1] text-white/85'
-                    }`}
-                    title="字幕设置"
-                    aria-label="字幕设置"
-                  >
-                    <Languages className="w-5 h-5" />
-                  </button>
-
-                  {/* 字幕选择菜单 */}
-                  {showSubtitleMenu && (
-                    <div 
-                      className="absolute bottom-12 right-0 min-w-48 rounded-lg border shadow-2xl z-50"
-                      style={{
-                        backgroundColor: 'rgba(0, 0, 0, 0.95)',
-                        backdropFilter: 'blur(12px)',
-                        borderColor: 'rgba(255, 255, 255, 0.1)',
-                      }}
-                    >
-                      <div className="p-2">
-                        {/* 关闭字幕选项 */}
-                        <button
-                          onClick={() => handleSubtitleTrackChange(-1)}
-                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                            selectedSubtitleTrack === -1
-                              ? 'bg-white/[0.15] text-white'
-                              : 'text-white/80 hover:bg-white/[0.1] hover:text-white'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>关闭字幕</span>
-                            {selectedSubtitleTrack === -1 && (
-                              <div className="w-2 h-2 rounded-full bg-white" />
-                            )}
-                          </div>
-                        </button>
-
-                        {/* 字幕轨道列表 */}
-                        {getSubtitleTracks().map((track, index) => (
-                          <button
-                            key={track.index}
-                            onClick={() => handleSubtitleTrackChange(index)}
-                            className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                              selectedSubtitleTrack === index
-                                ? 'bg-white/[0.15] text-white'
-                                : 'text-white/80 hover:bg-white/[0.1] hover:text-white'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span>{track.displayTitle || `字幕 ${index + 1}`}</span>
-                              {selectedSubtitleTrack === index && (
-                                <div className="w-2 h-2 rounded-full bg-white" />
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {/* 音轨切换按钮 */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowAudioMenu(!showAudioMenu)}
-                    className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95 text-white/85"
-                    title="音轨设置"
-                    aria-label="音轨设置"
-                  >
-                    <AudioLines className="w-5 h-5" />
-                  </button>
-
-                  {/* 音轨选择菜单 */}
-                  {showAudioMenu && (
-                    <div 
-                      className="absolute bottom-12 right-0 min-w-48 rounded-lg border shadow-2xl z-50"
-                      style={{
-                        backgroundColor: 'rgba(0, 0, 0, 0.95)',
-                        backdropFilter: 'blur(12px)',
-                        borderColor: 'rgba(255, 255, 255, 0.1)',
-                      }}
-                    >
-                      <div className="p-2">
-                        {/* 音轨列表 */}
-                        {getAudioTracks().map((track, index) => (
-                          <button
-                            key={track.index}
-                            onClick={() => handleAudioTrackChange(index)}
-                            className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                              selectedAudioTrack === index
-                                ? 'bg-white/[0.15] text-white'
-                                : 'text-white/80 hover:bg-white/[0.1] hover:text-white'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span>{track.displayTitle || `音轨 ${index + 1}`}</span>
-                              {selectedAudioTrack === index && (
-                                <div className="w-2 h-2 rounded-full bg-white" />
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 设置按钮 */}
-                <button
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
-                  title="设置"
-                >
-                  <Settings className="w-5 h-5 text-white/85" />
-                </button>
-
-                {/* 全屏按钮 */}
-                <button
-                  onClick={toggleFullscreen}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
-                  title={isFullscreen ? '退出全屏' : '全屏'}
-                >
-                  {isFullscreen ? (
-                    <Minimize className="w-5 h-5 text-white/85" />
-                  ) : (
-                    <Maximize className="w-5 h-5 text-white/85" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

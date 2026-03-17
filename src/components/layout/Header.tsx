@@ -427,56 +427,94 @@ export default function Header() {
             {/* 颜色选择面板 */}
             {showColorPicker && (
               <div 
-                className="absolute right-0 top-12 rounded-xl border p-4 shadow-2xl"
+                className="absolute right-0 top-12 rounded-2xl border shadow-2xl overflow-hidden backdrop-blur-xl"
                 style={{
                   zIndex: 9999,
-                  backgroundColor: 'rgba(0, 0, 0, 0.95)',
-                  backdropFilter: 'blur(12px)',
-                  width: '220px',
-                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                  backgroundColor: 'rgba(10, 10, 10, 0.6)',
+                  backdropFilter: 'blur(24px) saturate(180%)',
+                  width: '280px',
+                  borderColor: 'rgba(255, 255, 255, 0.12)',
                 }}
               >
-                <div className="mb-3 text-xs" style={{ color: 'rgba(255, 255, 255, 0.6)' }}>
-                  选择主题色
-                </div>
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(4, 1fr)', 
-                  gap: '12px',
-                  justifyItems: 'center',
+                {/* 标题区域 */}
+                <div className="px-5 py-4 border-b backdrop-blur-sm" style={{ 
+                  borderColor: 'rgba(255, 255, 255, 0.08)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
                 }}>
-                  {themeColors.map((theme) => (
-                    <button
-                      key={theme.value}
-                      onClick={() => {
-                        setThemeColor(theme.value)
-                        setShowColorPicker(false)
-                      }}
-                      className="relative transition-transform hover:scale-110"
-                      style={{ 
-                        backgroundColor: theme.color,
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        border: 'none',
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                      }}
-                      aria-label={theme.name}
-                      title={theme.name}
-                    >
-                      {themeColor === theme.value && (
+                  <div className="flex items-center gap-2">
+                    <Palette className="h-4 w-4" style={{ color: 'var(--theme-color)' }} />
+                    <span className="text-sm font-medium text-white/90">
+                      选择主题色
+                    </span>
+                  </div>
+                </div>
+
+                {/* 颜色网格 */}
+                <div className="p-5">
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(4, 1fr)', 
+                    gap: '16px',
+                  }}>
+                    {themeColors.map((theme) => (
+                      <button
+                        key={theme.value}
+                        onClick={() => {
+                          setThemeColor(theme.value)
+                          setShowColorPicker(false)
+                        }}
+                        className="group relative flex flex-col items-center gap-2 transition-all hover:scale-105"
+                        aria-label={theme.name}
+                        title={theme.name}
+                      >
+                        {/* 颜色方块 */}
                         <div 
-                          style={{
-                            position: 'absolute',
-                            inset: '0',
-                            borderRadius: '50%',
-                            border: '2px solid white',
+                          className="relative rounded-2xl transition-all"
+                          style={{ 
+                            backgroundColor: theme.color,
+                            width: '48px',
+                            height: '48px',
+                            boxShadow: themeColor === theme.value 
+                              ? `0 0 0 3px rgba(10, 10, 10, 0.6), 0 0 0 5px ${theme.color}40, 0 8px 16px rgba(0, 0, 0, 0.4)`
+                              : '0 4px 12px rgba(0, 0, 0, 0.3)',
                           }}
-                        />
-                      )}
-                    </button>
-                  ))}
+                        >
+                          {/* 选中指示器 */}
+                          {themeColor === theme.value && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <svg 
+                                className="w-6 h-6" 
+                                fill="none" 
+                                stroke="white" 
+                                viewBox="0 0 24 24"
+                                style={{
+                                  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3))',
+                                }}
+                              >
+                                <path 
+                                  strokeLinecap="round" 
+                                  strokeLinejoin="round" 
+                                  strokeWidth={3} 
+                                  d="M5 13l4 4L19 7" 
+                                />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 颜色名称 */}
+                        <span 
+                          className="text-xs transition-colors"
+                          style={{ 
+                            color: themeColor === theme.value ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.5)',
+                            fontWeight: themeColor === theme.value ? 500 : 400,
+                          }}
+                        >
+                          {theme.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

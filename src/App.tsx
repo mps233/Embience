@@ -11,6 +11,8 @@ import Home from './pages/Home'
 import Library from './pages/Library'
 import MediaDetail from './pages/MediaDetail'
 import Player from './pages/Player'
+import Favorites from './pages/Favorites'
+import Search from './pages/Search'
 
 /**
  * 创建 TanStack Query 客户端
@@ -88,32 +90,22 @@ function App() {
             } 
           />
           
-          {/* 搜索页面占位符 */}
+          {/* 搜索页面 */}
           <Route 
             path="/search" 
             element={
               <ProtectedRoute>
-                <Layout>
-                  <div className="p-8">
-                    <h1 className="text-2xl font-bold mb-4">搜索</h1>
-                    <p className="text-muted-foreground">搜索功能即将推出...</p>
-                  </div>
-                </Layout>
+                <Search />
               </ProtectedRoute>
             } 
           />
           
-          {/* 收藏页面占位符 */}
+          {/* 收藏页面 */}
           <Route 
             path="/favorites" 
             element={
               <ProtectedRoute>
-                <Layout>
-                  <div className="p-8">
-                    <h1 className="text-2xl font-bold mb-4">收藏</h1>
-                    <p className="text-muted-foreground">收藏页面即将推出...</p>
-                  </div>
-                </Layout>
+                <Favorites />
               </ProtectedRoute>
             } 
           />

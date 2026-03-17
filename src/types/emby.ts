@@ -421,6 +421,7 @@ export interface MediaQueryParams {
   limit?: number
   filters?: FilterType[]
   searchTerm?: string
+  genres?: string
   fields?: string[]
 }
 
