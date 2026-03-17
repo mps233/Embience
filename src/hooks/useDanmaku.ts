@@ -103,8 +103,17 @@ export function useDanmaku({ mediaItem, enabled = true }: UseDanmakuOptions) {
       return list
     },
     enabled: !!episodeId && enabled,
-    staleTime: 10 * 60 * 1000, // 缓存 10 分钟
-    gcTime: 10 * 60 * 1000,
+    staleTime: 30 * 60 * 1000, // 缓存 30 分钟
+    gcTime: 30 * 60 * 1000,
+    retry: (failureCount, error) => {
+      // 如果是 429 错误（请求过多），不重试
+      if (error instanceof Error && error.message.includes('429')) {
+        return false
+      }
+      // 其他错误最多重试 2 次
+      return failureCount < 2
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // 指数退避，最多 30 秒
   })
 
   // 发送弹幕

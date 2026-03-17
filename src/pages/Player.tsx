@@ -115,9 +115,9 @@ export default function Player() {
       {/* 顶部导航栏 */}
       <Header />
 
-      <div className="flex-1 flex gap-2 px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 pt-20 pb-4 justify-center items-start min-h-0">
+      <div className="flex-1 flex gap-2 px-2 sm:px-2 md:px-2 lg:px-2 xl:px-2 pt-20 pb-4 justify-center items-start min-h-0">
         {/* 左侧：播放器 */}
-        <div className="flex flex-col h-full items-center justify-center">
+        <div className="flex flex-col h-full items-center justify-center flex-shrink-0">
           <VideoPlayer
             key={mediaItem.id}
             mediaItem={mediaItem}
@@ -129,7 +129,7 @@ export default function Player() {
         </div>
         
         {/* 右侧：简介和选集/版本 */}
-        <div className="w-80 flex-shrink-0 flex flex-col min-h-0">
+        <div className="flex-1 max-w-80 flex-shrink-0 flex flex-col min-h-0">
           <div 
             className="rounded-xl p-5 flex-1 backdrop-blur-xl border flex flex-col min-h-0" 
             style={{ 

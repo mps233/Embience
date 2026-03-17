@@ -1290,22 +1290,12 @@ export function VideoPlayer({
               </div>
               {/* 右侧控制按钮 */}
               <div className="flex items-center gap-2">
-                {/* 弹幕切换按钮 */}
-                <button
-                  onClick={toggleDanmaku}
-                  className="flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-white/[0.1] text-white/85"
-                  title={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
-                  aria-label={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
-                >
-                  {danmakuSettings.enabled ? <DanmakuIcon /> : <DanmakuOffIcon />}
-                </button>
-
                 {/* 弹幕来源搜索框 - 弹幕关闭时禁用 */}
                 <button
                   ref={danmakuSelectorButtonRef}
                   onClick={() => setShowDanmakuSelector(true)}
                   disabled={!danmakuSettings.enabled}
-                  className={`flex items-center gap-2 px-3 h-9 rounded-full transition-all duration-200 hover:bg-white/[0.1] bg-white/[0.05] max-w-[200px] ${
+                  className={`flex items-center gap-2 px-3 h-9 rounded-full transition-all duration-200 hover:bg-white/[0.1] bg-white/[0.05] min-w-[200px] max-w-[280px] ${
                     danmakuSettings.enabled ? 'text-white/85' : 'opacity-40 pointer-events-none'
                   }`}
                   title="点击选择弹幕来源"
@@ -1315,6 +1305,16 @@ export function VideoPlayer({
                   <span className="text-sm truncate">
                     {getDanmakuSourceText()}
                   </span>
+                </button>
+
+                {/* 弹幕切换按钮 */}
+                <button
+                  onClick={toggleDanmaku}
+                  className="flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-white/[0.1] text-white/85"
+                  title={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
+                  aria-label={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
+                >
+                  {danmakuSettings.enabled ? <DanmakuIcon /> : <DanmakuOffIcon />}
                 </button>
 
                 {/* 弹幕设置按钮 - 弹幕关闭时禁用 */}
