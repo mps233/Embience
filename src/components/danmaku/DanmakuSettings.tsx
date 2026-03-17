@@ -53,19 +53,21 @@ export default function DanmakuSettings() {
       </DropdownMenuTrigger>
       
       <DropdownMenuContent 
-        className="w-72 rounded-lg border shadow-2xl z-50"
+        className="w-72 rounded-2xl border shadow-2xl z-50"
         style={{
-          backgroundColor: 'rgba(0, 0, 0, 0.95)',
-          backdropFilter: 'blur(12px)',
-          borderColor: 'rgba(255, 255, 255, 0.1)',
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(40px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+          borderColor: 'rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) inset',
         }}
       >
-        <DropdownMenuLabel className="text-white">弹幕设置</DropdownMenuLabel>
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+        <DropdownMenuLabel className="text-white/95 text-sm font-semibold px-4 py-3 -m-1" style={{ background: 'rgba(255, 255, 255, 0.03)' }}>弹幕设置</DropdownMenuLabel>
+        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }} />
 
         {/* 透明度 */}
         <div className="px-3 py-3">
-          <label className="text-sm text-white/80 mb-2 block">
+          <label className="text-sm text-white/90 mb-2 block">
             透明度: {settings.opacity}%
           </label>
           <input
@@ -88,11 +90,11 @@ export default function DanmakuSettings() {
           />
         </div>
 
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
 
         {/* 滚动速度 */}
         <div className="px-3 py-3">
-          <label className="text-sm text-white/80 mb-2 block">
+          <label className="text-sm text-white/90 mb-2 block">
             滚动速度: {getSpeedLabel(settings.speed)} ({settings.speed}/10)
           </label>
           <input
@@ -113,7 +115,7 @@ export default function DanmakuSettings() {
               [&::-webkit-slider-thumb]:transition-transform
               [&::-webkit-slider-thumb]:hover:scale-110"
           />
-          <div className="flex justify-between text-xs text-white/50 mt-1">
+          <div className="flex justify-between text-xs text-white/60 mt-1">
             <span>极慢</span>
             <span>慢</span>
             <span>正常</span>
@@ -122,11 +124,11 @@ export default function DanmakuSettings() {
           </div>
         </div>
 
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
 
         {/* 字体大小 */}
         <div className="px-3 py-3">
-          <label className="text-sm text-white/80 mb-2 block">
+          <label className="text-sm text-white/90 mb-2 block">
             字体大小: {settings.fontSize}px
           </label>
           <input
@@ -147,18 +149,18 @@ export default function DanmakuSettings() {
               [&::-webkit-slider-thumb]:transition-transform
               [&::-webkit-slider-thumb]:hover:scale-110"
           />
-          <div className="flex justify-between text-xs text-white/50 mt-1">
+          <div className="flex justify-between text-xs text-white/60 mt-1">
             <span>12px</span>
             <span>30px</span>
             <span>48px</span>
           </div>
         </div>
 
-        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }} />
+        <DropdownMenuSeparator style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
 
         {/* 显示区域 */}
         <div className="px-3 py-3">
-          <label className="text-sm text-white/80 mb-2 block">
+          <label className="text-sm text-white/90 mb-2 block">
             显示区域: {settings.displayArea}% (从顶部开始)
           </label>
           <input
@@ -179,7 +181,7 @@ export default function DanmakuSettings() {
               [&::-webkit-slider-thumb]:transition-transform
               [&::-webkit-slider-thumb]:hover:scale-110"
           />
-          <div className="flex justify-between text-xs text-white/50 mt-1">
+          <div className="flex justify-between text-xs text-white/60 mt-1">
             <span>10%</span>
             <span>50%</span>
             <span>100%</span>

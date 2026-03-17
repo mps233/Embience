@@ -26,9 +26,10 @@ interface UseDanmakuOptions {
  * 弹幕 Hook
  */
 export function useDanmaku({ mediaItem, enabled = true }: UseDanmakuOptions) {
-  const { setDanmakuList, setCurrentEpisodeId, clearDanmaku } = useDanmakuStore()
+  const { setDanmakuList, setCurrentEpisodeId } = useDanmakuStore()
   const [episodeId, setEpisodeId] = useState<string | null>(null)
   const [isMatching, setIsMatching] = useState(false)
+  const [manualEpisodeId, setManualEpisodeId] = useState<string | null>(null)
 
   // 创建弹幕 API 客户端
   const danmakuClient = createDanmakuClient({
@@ -40,6 +41,13 @@ export function useDanmaku({ mediaItem, enabled = true }: UseDanmakuOptions) {
 
   // 匹配弹幕
   useEffect(() => {
+    // 如果有手动选择的弹幕，优先使用手动选择的
+    if (manualEpisodeId) {
+      setEpisodeId(manualEpisodeId)
+      setCurrentEpisodeId(manualEpisodeId)
+      return
+    }
+
     if (!enabled) return
 
     const matchDanmaku = async () => {
@@ -73,7 +81,7 @@ export function useDanmaku({ mediaItem, enabled = true }: UseDanmakuOptions) {
     return () => {
       // 不清理弹幕数据，保留缓存
     }
-  }, [mediaItem.id]) // 移除 enabled 依赖，只在 mediaItem 变化时重新匹配
+  }, [mediaItem.id, manualEpisodeId]) // 添加 manualEpisodeId 依赖
 
   // 获取弹幕数据
   const {
@@ -137,6 +145,16 @@ export function useDanmaku({ mediaItem, enabled = true }: UseDanmakuOptions) {
     },
   })
 
+  // 手动选择弹幕
+  const selectDanmaku = (newEpisodeId: string) => {
+    setManualEpisodeId(newEpisodeId)
+  }
+
+  // 重置为自动匹配
+  const resetToAutoMatch = () => {
+    setManualEpisodeId(null)
+  }
+
   return {
     // 状态
     episodeId,
@@ -145,9 +163,12 @@ export function useDanmaku({ mediaItem, enabled = true }: UseDanmakuOptions) {
     isLoadingDanmaku,
     danmakuError,
     hasDanmaku: !!episodeId && (danmakuList?.length || 0) > 0,
+    isManualSelection: !!manualEpisodeId,
 
     // 操作
     sendDanmaku: sendDanmakuMutation.mutateAsync,
     isSendingDanmaku: sendDanmakuMutation.isPending,
+    selectDanmaku,
+    resetToAutoMatch,
   }
 }

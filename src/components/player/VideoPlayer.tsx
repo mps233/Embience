@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useDanmakuStore } from '@/stores/danmakuStore'
 import { useDanmaku } from '@/hooks/useDanmaku'
 import { DanmakuCanvas, DanmakuSettings } from '@/components/danmaku'
+import DanmakuSelector from '@/components/danmaku/DanmakuSelector'
 import { 
   Play, 
   Pause, 
@@ -30,6 +31,7 @@ import {
   Languages,
   AudioLines,
   RectangleHorizontal,
+  Search,
 } from 'lucide-react'
 
 // 弹幕图标组件 - 开启状态（MingCute danmaku-line）
@@ -206,14 +208,24 @@ export function VideoPlayer({
   
   // 弹幕功能
   const { settings: danmakuSettings, updateSettings: updateDanmakuSettings } = useDanmakuStore()
+  const [showDanmakuSelector, setShowDanmakuSelector] = useState(false)
+  const danmakuSelectorButtonRef = useRef<HTMLButtonElement>(null)
+  
   const {
     isMatching,
     isLoadingDanmaku,
     hasDanmaku,
+    selectDanmaku,
   } = useDanmaku({
     mediaItem,
     enabled: danmakuSettings.enabled,
   })
+
+  // 存储弹幕来源信息
+  const [danmakuSource, setDanmakuSource] = useState<{
+    animeTitle: string
+    episodeTitle: string
+  } | null>(null)
   
   // 错误状态
   const [error, setError] = useState<string | null>(null)
@@ -986,6 +998,28 @@ export function VideoPlayer({
     updateDanmakuSettings({ enabled: !danmakuSettings.enabled })
   }
 
+  // 处理手动选择弹幕
+  const handleSelectDanmaku = (episodeId: string, animeTitle: string, episodeTitle: string) => {
+    console.log('手动选择弹幕:', { episodeId, animeTitle, episodeTitle })
+    selectDanmaku(episodeId)
+    setDanmakuSource({ animeTitle, episodeTitle })
+  }
+
+  // 获取弹幕来源显示文本
+  const getDanmakuSourceText = () => {
+    if (isMatching || isLoadingDanmaku) {
+      return '加载中...'
+    }
+    if (!hasDanmaku) {
+      return '点击搜索弹幕'
+    }
+    if (danmakuSource) {
+      return `${danmakuSource.animeTitle} - ${danmakuSource.episodeTitle}`
+    }
+    // 自动匹配的情况，显示媒体项名称
+    return mediaItem.seriesName || mediaItem.name
+  }
+
   return (
     <div 
       ref={containerRef}
@@ -1266,6 +1300,23 @@ export function VideoPlayer({
                   {danmakuSettings.enabled ? <DanmakuIcon /> : <DanmakuOffIcon />}
                 </button>
 
+                {/* 弹幕来源搜索框 - 弹幕关闭时禁用 */}
+                <button
+                  ref={danmakuSelectorButtonRef}
+                  onClick={() => setShowDanmakuSelector(true)}
+                  disabled={!danmakuSettings.enabled}
+                  className={`flex items-center gap-2 px-3 h-9 rounded-full transition-all duration-200 hover:bg-white/[0.1] bg-white/[0.05] max-w-[200px] ${
+                    danmakuSettings.enabled ? 'text-white/85' : 'opacity-40 pointer-events-none'
+                  }`}
+                  title="点击选择弹幕来源"
+                  aria-label="选择弹幕来源"
+                >
+                  <Search className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-sm truncate">
+                    {getDanmakuSourceText()}
+                  </span>
+                </button>
+
                 {/* 弹幕设置按钮 - 弹幕关闭时禁用 */}
                 <div className={danmakuSettings.enabled ? '' : 'opacity-40 pointer-events-none'}>
                   <DanmakuSettings />
@@ -1431,6 +1482,15 @@ export function VideoPlayer({
           </div>
         </div>
       </div>
+
+      {/* 弹幕选择器对话框 */}
+      <DanmakuSelector
+        open={showDanmakuSelector}
+        onClose={() => setShowDanmakuSelector(false)}
+        onSelect={handleSelectDanmaku}
+        defaultKeyword={mediaItem.seriesName || mediaItem.name}
+        triggerRef={danmakuSelectorButtonRef}
+      />
     </div>
   )
 }
