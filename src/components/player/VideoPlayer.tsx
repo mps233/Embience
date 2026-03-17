@@ -16,7 +16,7 @@ import { usePlayerStore } from '@/stores/playerStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useDanmakuStore } from '@/stores/danmakuStore'
 import { useDanmaku } from '@/hooks/useDanmaku'
-import { DanmakuCanvas, DanmakuSettings, DanmakuInput } from '@/components/danmaku'
+import { DanmakuCanvas, DanmakuSettings } from '@/components/danmaku'
 import { 
   Play, 
   Pause, 
@@ -30,8 +30,33 @@ import {
   Languages,
   AudioLines,
   RectangleHorizontal,
-  MessageSquare
 } from 'lucide-react'
+
+// 弹幕图标组件 - 开启状态（MingCute danmaku-line）
+const DanmakuIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="currentColor"
+    className={className}
+  >
+    <path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"/>
+    <path d="M9 12a1 1 0 0 1 .117 1.993L9 14H4v1a1 1 0 0 0 .883.993L5 16h1.5a1.5 1.5 0 0 1 1.493 1.356L8 17.5v.5l2.133-1.6a2 2 0 0 1 1.016-.391l.184-.009H18a1 1 0 0 0 .993-.883L19 15v-3h2v3a3 3 0 0 1-2.824 2.995L18 18h-6.667L8 20.5c-.791.593-1.906.075-1.994-.879L6 19.5V18H5a3 3 0 0 1-2.995-2.824L2 15v-2a1 1 0 0 1 .883-.993L3 12zm6 0a1 1 0 0 1 .117 1.993L15 14h-2a1 1 0 0 1-.117-1.993L13 12zM7 8a1 1 0 0 1 .117 1.993L7 10H5a1 1 0 0 1-.117-1.993L5 8zm12 0l.117.007a1 1 0 0 1 0 1.986L19 10h-8a1 1 0 0 1-.117-1.993L11 8zm-1-5a3 3 0 0 1 2.995 2.824L21 6v2h-2V6a1 1 0 0 0-.883-.993L18 5H5a1 1 0 0 0-.993.883L4 6v2H2V6a3 3 0 0 1 2.824-2.995L5 3z"/>
+  </svg>
+)
+
+// 弹幕图标组件 - 关闭状态（MingCute danmaku-off-line）
+const DanmakuOffIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="currentColor"
+    className={className}
+  >
+    <path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"/>
+    <path d="M4 14v1a1 1 0 0 0 1 1h1.5A1.5 1.5 0 0 1 8 17.5v.5l2.4-1.8l1.2 1.6L8 20.5c-.824.618-2 .03-2-1V18H5a3 3 0 0 1-3-3v-2a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2zm1-6a1 1 0 0 0 0 2h2a1 1 0 0 0 0-2zm6 0a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2zM5 3a3 3 0 0 0-3 3v1h2V6a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v1h2V6a3 3 0 0 0-3-3zm8 13.5a4.5 4.5 0 1 1 9 0a4.5 4.5 0 0 1-9 0m2.172-.914a2.5 2.5 0 0 0 3.241 3.241zm1.414-1.414l3.242 3.242a2.5 2.5 0 0 0-3.241-3.241"/>
+  </svg>
+)
 
 /**
  * VideoPlayer 组件属性
@@ -178,18 +203,13 @@ export function VideoPlayer({
   // 字幕和音轨菜单显示状态
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false)
   const [showAudioMenu, setShowAudioMenu] = useState(false)
-  const [showDanmakuInput, setShowDanmakuInput] = useState(false)
   
   // 弹幕功能
   const { settings: danmakuSettings, updateSettings: updateDanmakuSettings } = useDanmakuStore()
   const {
-    episodeId,
-    danmakuList,
     isMatching,
     isLoadingDanmaku,
     hasDanmaku,
-    sendDanmaku,
-    isSendingDanmaku,
   } = useDanmaku({
     mediaItem,
     enabled: danmakuSettings.enabled,
@@ -213,10 +233,10 @@ export function VideoPlayer({
   // 视频加载状态 - 用于触发字幕检测
   const [videoLoaded, setVideoLoaded] = useState(false)
   
-  // 宽高比状态（16:9 或 21:9）- 从 localStorage 读取初始值
-  const [aspectRatioMode, setAspectRatioMode] = useState<'16:9' | '21:9'>(() => {
+  // 宽高比状态（16:9 或 auto）- 从 localStorage 读取初始值
+  const [aspectRatioMode, setAspectRatioMode] = useState<'16:9' | 'auto'>(() => {
     const saved = localStorage.getItem('videoPlayerAspectRatio')
-    return (saved === '16:9' || saved === '21:9') ? saved : '16:9'
+    return (saved === '16:9' || saved === 'auto') ? saved : '16:9'
   })
   
   // 计算视频容器尺寸
@@ -779,10 +799,10 @@ export function VideoPlayer({
     }
   }
 
-  // 切换宽高比模式
+  // 切换宽高比模式（16:9 <-> auto）
   const toggleAspectRatio = () => {
     setAspectRatioMode(prev => {
-      const newMode = prev === '16:9' ? '21:9' : '16:9'
+      const newMode: '16:9' | 'auto' = prev === '16:9' ? 'auto' : '16:9'
       // 保存到 localStorage
       localStorage.setItem('videoPlayerAspectRatio', newMode)
       return newMode
@@ -793,6 +813,7 @@ export function VideoPlayer({
   useEffect(() => {
     const calculateSize = () => {
       const container = containerRef.current
+      const videoElement = videoRef.current
       if (!container) return
       
       // 获取容器的可用高度
@@ -802,11 +823,19 @@ export function VideoPlayer({
       // 视频区域的可用高度 = 容器高度 - 控制栏高度
       const availableHeight = Math.max(containerHeight - controlBarHeight, 300)
       
-      // 根据宽高比计算宽度
-      const aspectRatio = aspectRatioMode === '16:9' ? 16 / 9 : 21 / 9
+      // 根据宽高比模式计算宽度
+      let aspectRatio: number
+      if (aspectRatioMode === 'auto' && videoElement?.videoWidth && videoElement?.videoHeight) {
+        // 使用视频原始宽高比
+        aspectRatio = videoElement.videoWidth / videoElement.videoHeight
+      } else {
+        // 默认 16:9
+        aspectRatio = 16 / 9
+      }
+      
       const calculatedWidth = availableHeight * aspectRatio
       
-      console.log('[播放器尺寸] 容器高度:', containerHeight, '可用高度:', availableHeight, '计算宽度:', calculatedWidth, '宽高比:', aspectRatioMode)
+      console.log('[播放器尺寸] 容器高度:', containerHeight, '可用高度:', availableHeight, '计算宽度:', calculatedWidth, '宽高比:', aspectRatioMode, '实际比例:', aspectRatio.toFixed(2))
       
       setVideoContainerSize({
         width: calculatedWidth,
@@ -820,8 +849,17 @@ export function VideoPlayer({
     setTimeout(calculateSize, 500)
     window.addEventListener('resize', calculateSize)
     
+    // 监听视频元数据加载完成事件（用于 auto 模式）
+    const videoElement = videoRef.current
+    if (videoElement) {
+      videoElement.addEventListener('loadedmetadata', calculateSize)
+    }
+    
     return () => {
       window.removeEventListener('resize', calculateSize)
+      if (videoElement) {
+        videoElement.removeEventListener('loadedmetadata', calculateSize)
+      }
     }
   }, [aspectRatioMode])
 
@@ -931,34 +969,17 @@ export function VideoPlayer({
   // 点击外部关闭菜单
   useEffect(() => {
     const handleClickOutside = () => {
-      if (showSubtitleMenu || showAudioMenu || showDanmakuInput) {
+      if (showSubtitleMenu || showAudioMenu) {
         setShowSubtitleMenu(false)
         setShowAudioMenu(false)
-        setShowDanmakuInput(false)
       }
     }
 
-    if (showSubtitleMenu || showAudioMenu || showDanmakuInput) {
+    if (showSubtitleMenu || showAudioMenu) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showSubtitleMenu, showAudioMenu, showDanmakuInput])
-
-  // 处理发送弹幕
-  const handleSendDanmaku = async (text: string, color: string, type: any) => {
-    try {
-      await sendDanmaku({
-        text,
-        color,
-        type,
-        time: currentTime,
-      })
-      console.log('弹幕发送成功')
-    } catch (error) {
-      console.error('弹幕发送失败:', error)
-      throw error
-    }
-  }
+  }, [showSubtitleMenu, showAudioMenu])
 
   // 切换弹幕显示
   const toggleDanmaku = () => {
@@ -993,8 +1014,8 @@ export function VideoPlayer({
       <div 
         className="relative bg-black overflow-hidden cursor-pointer flex-shrink-0 flex items-center justify-center" 
         style={{ 
-          width: videoContainerSize.width > 0 ? `${videoContainerSize.width}px` : '100%',
-          height: videoContainerSize.height > 0 ? `${videoContainerSize.height}px` : 'auto',
+          width: isFullscreen ? '100vw' : (videoContainerSize.width > 0 ? `${videoContainerSize.width}px` : '100%'),
+          height: isFullscreen ? '100vh' : (videoContainerSize.height > 0 ? `${videoContainerSize.height}px` : 'auto'),
           borderRadius: isFullscreen ? '0' : '0.75rem 0.75rem 0 0'
         }}
         onClick={handlePlayButtonClick}
@@ -1005,10 +1026,11 @@ export function VideoPlayer({
           className="video-js"
           playsInline
           controls={false}
+          draggable={false}
           style={{
             width: '100%',
             height: '100%',
-            objectFit: 'contain',
+            objectFit: isFullscreen ? 'contain' : (aspectRatioMode === 'auto' ? 'contain' : 'cover'),
             objectPosition: 'center center'
           }}
         />
@@ -1072,16 +1094,6 @@ export function VideoPlayer({
               </svg>
             </div>
           </button>
-        )}
-        
-        {/* 弹幕输入框 - 显示在视频底部 */}
-        {showDanmakuInput && danmakuSettings.enabled && hasDanmaku && (
-          <div className="absolute bottom-4 left-4 right-4 z-40">
-            <DanmakuInput
-              currentTime={currentTime}
-              onSend={handleSendDanmaku}
-            />
-          </div>
         )}
       </div>
       {/* 统一控制栏 - 非全屏时在视频下方，全屏时覆盖在视频上方 */}
@@ -1247,37 +1259,17 @@ export function VideoPlayer({
                 {/* 弹幕切换按钮 */}
                 <button
                   onClick={toggleDanmaku}
-                  className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
-                    danmakuSettings.enabled 
-                      ? 'bg-white/[0.2] text-white hover:bg-white/[0.25]' 
-                      : 'hover:bg-white/[0.1] text-white/85'
-                  }`}
+                  className="flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-white/[0.1] text-white/85"
                   title={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
                   aria-label={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
                 >
-                  <MessageSquare className="w-5 h-5" />
+                  {danmakuSettings.enabled ? <DanmakuIcon /> : <DanmakuOffIcon />}
                 </button>
 
-                {/* 弹幕设置按钮 - 仅在弹幕启用时显示 */}
-                {danmakuSettings.enabled && (
+                {/* 弹幕设置按钮 - 弹幕关闭时禁用 */}
+                <div className={danmakuSettings.enabled ? '' : 'opacity-40 pointer-events-none'}>
                   <DanmakuSettings />
-                )}
-
-                {/* 弹幕输入按钮 - 仅在弹幕启用且有弹幕时显示 */}
-                {danmakuSettings.enabled && hasDanmaku && (
-                  <button
-                    onClick={() => setShowDanmakuInput(!showDanmakuInput)}
-                    className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
-                      showDanmakuInput 
-                        ? 'bg-white/[0.2] text-white hover:bg-white/[0.25]' 
-                        : 'hover:bg-white/[0.1] text-white/85'
-                    }`}
-                    title="发送弹幕"
-                    aria-label="发送弹幕"
-                  >
-                    <MessageSquare className="w-5 h-5" fill={showDanmakuInput ? 'currentColor' : 'none'} />
-                  </button>
-                )}
+                </div>
 
                 {/* 字幕切换按钮 */}
                 <div className="relative">
@@ -1395,12 +1387,23 @@ export function VideoPlayer({
                 <button
                   onClick={toggleAspectRatio}
                   className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
-                  title={`切换到 ${aspectRatioMode === '16:9' ? '21:9' : '16:9'}`}
+                  title={`宽高比: ${aspectRatioMode === 'auto' ? '自动适配' : '16:9'}`}
                 >
-                  <div className="flex flex-col items-center justify-center">
+                  {aspectRatioMode === 'auto' ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      fill="currentColor"
+                      viewBox="0 0 16 16"
+                      className="text-white/85"
+                    >
+                      <path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h13A1.5 1.5 0 0 1 16 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 12.5zM1.5 3a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5z"/>
+                      <path d="M2 4.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1H3v2.5a.5.5 0 0 1-1 0zm12 7a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1 0-1H13V8.5a.5.5 0 0 1 1 0z"/>
+                    </svg>
+                  ) : (
                     <RectangleHorizontal className="w-5 h-5 text-white/85" />
-                    <span className="text-[8px] text-white/70 mt-[-2px]">{aspectRatioMode}</span>
-                  </div>
+                  )}
                 </button>
 
                 {/* 设置按钮 */}
