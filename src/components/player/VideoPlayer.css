@@ -1,0 +1,336 @@
+/**
+ * VideoPlayer 自定义样式
+ * 自定义 Video.js 皮肤以匹配应用设计
+ */
+
+/* 隐藏原生 video 控制栏 */
+video::-webkit-media-controls {
+  display: none !important;
+}
+
+video::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+
+video::-webkit-media-controls-panel {
+  display: none !important;
+}
+
+video::-moz-media-controls {
+  display: none !important;
+}
+
+video::-ms-media-controls {
+  display: none !important;
+}
+
+/* Video.js 播放器容器样式重置 */
+.video-js {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #000;
+}
+
+.video-js video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  display: block !important;
+}
+
+/* 确保 Video.js 的所有子元素都不会影响布局 */
+.video-js .vjs-tech {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  display: block !important;
+}
+
+/* 确保播放器容器有固定的尺寸框架 */
+[data-vjs-player] {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 400px;
+  background-color: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* 自定义 Video.js 主题 */
+.video-js.vjs-theme-fantasy {
+  /* 播放器容器 */
+  font-family: inherit;
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #000;
+}
+
+/* 确保 video 元素填充整个容器 */
+.video-js.vjs-theme-fantasy video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
+}
+
+/* 隐藏 Video.js 默认的大播放按钮 */
+.video-js.vjs-theme-fantasy .vjs-big-play-button {
+  display: none;
+}
+
+/* 控制栏 */
+.video-js.vjs-theme-fantasy .vjs-control-bar {
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.85) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  height: 4.5em;
+  padding: 0 1.5em;
+  backdrop-filter: blur(10px);
+}
+
+/* 控制按钮 */
+.video-js.vjs-theme-fantasy .vjs-control {
+  width: 3.5em;
+}
+
+.video-js.vjs-theme-fantasy .vjs-button > .vjs-icon-placeholder:before {
+  font-size: 2em;
+  line-height: 2.25;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* 按钮悬停效果 - 彩虹色 */
+.video-js.vjs-theme-fantasy .vjs-button:hover {
+  color: #cad7ff;
+  text-shadow: 0 0 8px rgba(202, 215, 255, 0.5);
+}
+
+/* 进度条 - 彩虹渐变 */
+.video-js.vjs-theme-fantasy .vjs-progress-control {
+  position: absolute;
+  top: -0.6em;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 0.6em;
+}
+
+.video-js.vjs-theme-fantasy .vjs-progress-holder {
+  height: 6px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.video-js.vjs-theme-fantasy .vjs-play-progress {
+  background: linear-gradient(
+    90deg,
+    #f8c8dc 0%,
+    #fff4aa 33%,
+    #d8f9d0 66%,
+    #cad7ff 100%
+  );
+  border-radius: 4px;
+  box-shadow: 0 0 12px rgba(248, 200, 220, 0.5);
+}
+
+.video-js.vjs-theme-fantasy .vjs-play-progress:before {
+  color: #fff;
+  font-size: 1.2em;
+  text-shadow: 0 0 8px rgba(248, 200, 220, 0.8);
+}
+
+.video-js.vjs-theme-fantasy .vjs-load-progress {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+.video-js.vjs-theme-fantasy .vjs-load-progress div {
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 3px;
+}
+
+/* 进度条悬停效果 */
+.video-js.vjs-theme-fantasy .vjs-progress-control:hover .vjs-progress-holder {
+  font-size: 1.8em;
+}
+
+.video-js.vjs-theme-fantasy .vjs-progress-control:hover .vjs-play-progress:before {
+  display: block;
+}
+
+/* 时间显示 */
+.video-js.vjs-theme-fantasy .vjs-time-control {
+  font-size: 1.1em;
+  line-height: 4.1em;
+  min-width: 3.5em;
+  padding: 0 0.5em;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.video-js.vjs-theme-fantasy .vjs-current-time,
+.video-js.vjs-theme-fantasy .vjs-duration {
+  display: block;
+}
+
+.video-js.vjs-theme-fantasy .vjs-time-divider {
+  min-width: 1em;
+  padding: 0;
+  line-height: 4.1em;
+}
+
+/* 音量控制 - 彩虹渐变 */
+.video-js.vjs-theme-fantasy .vjs-volume-panel {
+  width: 6.5em;
+  transition: width 0.3s ease;
+}
+
+.video-js.vjs-theme-fantasy .vjs-volume-panel:hover {
+  width: 8em;
+}
+
+.video-js.vjs-theme-fantasy .vjs-volume-bar {
+  background: rgba(255, 255, 255, 0.15);
+  margin: 1.85em 0.45em;
+  border-radius: 4px;
+}
+
+.video-js.vjs-theme-fantasy .vjs-volume-level {
+  background: linear-gradient(
+    90deg,
+    #f8c8dc 0%,
+    #fff4aa 33%,
+    #d8f9d0 66%,
+    #cad7ff 100%
+  );
+  border-radius: 4px;
+  box-shadow: 0 0 8px rgba(248, 200, 220, 0.5);
+}
+
+.video-js.vjs-theme-fantasy .vjs-volume-level:before {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(248, 200, 220, 0.8);
+}
+
+/* 全屏按钮 */
+.video-js.vjs-theme-fantasy .vjs-fullscreen-control {
+  order: 10;
+}
+
+/* 加载动画 - 彩虹渐变 */
+.video-js.vjs-theme-fantasy .vjs-loading-spinner {
+  border-color: rgba(255, 255, 255, 0.1);
+  border-top-color: transparent;
+  animation: vjs-spinner-spin 1s linear infinite;
+  position: relative;
+}
+
+.video-js.vjs-theme-fantasy .vjs-loading-spinner::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 4px solid transparent;
+  border-top-color: #f8c8dc;
+  border-right-color: #fff4aa;
+  border-bottom-color: #d8f9d0;
+  border-left-color: #cad7ff;
+  animation: vjs-spinner-spin 1.5s linear infinite reverse;
+}
+
+@keyframes vjs-spinner-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 错误显示 */
+.video-js.vjs-theme-fantasy .vjs-error-display {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.95) 0%, rgba(220, 38, 38, 0.95) 100%);
+  backdrop-filter: blur(10px);
+}
+
+.video-js.vjs-theme-fantasy .vjs-error-display:before {
+  color: #fff;
+  font-size: 3em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.video-js.vjs-theme-fantasy .vjs-error-display .vjs-modal-dialog-content {
+  color: #fff;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .video-js.vjs-theme-fantasy .vjs-big-play-button {
+    width: 68px;
+    height: 68px;
+    line-height: 68px;
+    font-size: 40px;
+  }
+
+  .video-js.vjs-theme-fantasy .vjs-control-bar {
+    height: 3.5em;
+    padding: 0 1em;
+  }
+
+  .video-js.vjs-theme-fantasy .vjs-button > .vjs-icon-placeholder:before {
+    font-size: 1.6em;
+  }
+
+  .video-js.vjs-theme-fantasy .vjs-time-control {
+    font-size: 0.95em;
+    line-height: 3.7em;
+  }
+}
+
+/* 暗色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .video-js.vjs-theme-fantasy .vjs-control-bar {
+    background: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.98) 0%,
+      rgba(0, 0, 0, 0.9) 50%,
+      rgba(0, 0, 0, 0) 100%
+    );
+  }
+}
+
+/* 鼠标悬停时显示控制栏 */
+.video-js.vjs-theme-fantasy.vjs-user-inactive.vjs-playing .vjs-control-bar {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.video-js.vjs-theme-fantasy.vjs-user-inactive.vjs-playing:hover .vjs-control-bar {
+  opacity: 1;
+}
+
+/* 播放器聚焦样式 - 彩虹色 */
+.video-js.vjs-theme-fantasy:focus {
+  outline: none;
+  box-shadow: 
+    0 0 0 3px rgba(202, 215, 255, 0.4),
+    0 0 20px rgba(202, 215, 255, 0.3);
+}
+
+/* 时间提示框 */
+.video-js.vjs-theme-fantasy .vjs-time-tooltip {
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.9em;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}

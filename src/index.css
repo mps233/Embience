@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* 隐藏滚动条但保持滚动功能 */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+    
+    /* 毛玻璃风格变量 */
+    --glass-bg-light: rgba(255, 255, 255, 0.1);
+    --glass-bg-medium: rgba(255, 255, 255, 0.15);
+    --glass-bg-strong: rgba(255, 255, 255, 0.25);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --glass-border-hover: rgba(255, 255, 255, 0.3);
+    
+    /* 主题色变量 - 默认橙色 */
+    --theme-color: orange;
+  }
+
+  .dark {
+    --background: 10 10% 8%;
+    --foreground: 210 40% 98%;
+    --card: 10 10% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 10 10% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 55%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  /* 计算并保留滚动条宽度 */
+  html {
+    --scrollbar-width: calc(100vw - 100%);
+    overflow-y: scroll;
+  }
+  
+  body {
+    background: #17181A;
+    color: white;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* 使用固定宽度，减去滚动条宽度 */
+    width: calc(100vw - var(--scrollbar-width));
+    overflow-x: hidden;
+  }
+  
+  /* 深色模式背景 */
+  .dark body {
+    background: #17181A;
+    color: white;
+  }
+  
+  /* 防止 Radix UI 组件修改滚动和布局 */
+  html[data-scroll-locked] {
+    overflow-y: scroll !important;
+    padding-right: 0 !important;
+  }
+  
+  body[data-scroll-locked] {
+    overflow: visible !important;
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+    width: calc(100vw - var(--scrollbar-width)) !important;
+  }
+}
+
+/* 自定义滚动条样式 */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-secondary;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-md;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+  }
+}
+
