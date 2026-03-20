@@ -240,6 +240,7 @@ export function VideoPlayer({
   const isDraggingProgressRef = useRef(false) // 使用 ref 确保立即生效
   const [showControls, setShowControls] = useState(true)
   const hideControlsTimeoutRef = useRef<number | null>(null)
+  const clickTimerRef = useRef<number | null>(null)
   
   // 视频加载状态 - 用于触发字幕检测
   const [videoLoaded, setVideoLoaded] = useState(false)
@@ -705,6 +706,31 @@ export function VideoPlayer({
     }
   }
 
+  // 处理视频区域单击（播放/暂停）
+  const handleVideoAreaClick = () => {
+    // 双击触发前先缓存单击，等待是否进入双击
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      return
+    }
+
+    clickTimerRef.current = window.setTimeout(() => {
+      handlePlayButtonClick()
+      clickTimerRef.current = null
+    }, 220)
+  }
+
+  // 处理视频区域双击（全屏/退出全屏）
+  const handleVideoAreaDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    toggleFullscreen()
+  }
+
   // 格式化时间显示
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600)
@@ -998,6 +1024,9 @@ export function VideoPlayer({
       if (hideControlsTimeoutRef.current !== null) {
         window.clearTimeout(hideControlsTimeoutRef.current)
       }
+      if (clickTimerRef.current !== null) {
+        window.clearTimeout(clickTimerRef.current)
+      }
     }
   }, [])
 
@@ -1151,7 +1180,8 @@ export function VideoPlayer({
           height: isFullscreen ? '100vh' : (videoContainerSize.height > 0 ? `${videoContainerSize.height}px` : 'auto'),
           borderRadius: isFullscreen ? '0' : '0.75rem 0.75rem 0 0'
         }}
-        onClick={handlePlayButtonClick}
+        onClick={handleVideoAreaClick}
+        onDoubleClick={handleVideoAreaDoubleClick}
       >
         {/* 原生视频元素 - 隐藏默认控制栏 */}
         <video
@@ -1195,7 +1225,10 @@ export function VideoPlayer({
         {/* 中央播放按钮 - 只在暂停时显示 */}
         {!isPlaying && (
           <button
-            onClick={handlePlayButtonClick}
+            onClick={(e) => {
+              e.stopPropagation()
+              handlePlayButtonClick()
+            }}
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-20 h-20 rounded-full transition-all duration-300 z-30 hover:scale-110 active:scale-105 backdrop-blur-xl"
             style={{
               background: 'radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%)',
