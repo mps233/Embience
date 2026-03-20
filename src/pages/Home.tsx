@@ -11,12 +11,13 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { createEmbyClient } from '@/services/api/embyClient'
+import { buildApiUrl, type MediaServerType } from '@/services/api/mediaServer'
 import { createMediaService } from '@/services/media/mediaService'
 import { useMediaViews, useLatestItems } from '@/hooks/useMedia'
 import MediaGrid from '@/components/media/MediaGrid'
 import Layout from '@/components/layout/Layout'
 import { Button } from '@/components/ui/button'
-import { ChevronRight, Play } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MediaView, MediaItem } from '@/types/emby'
 
@@ -28,14 +29,18 @@ import type { MediaView, MediaItem } from '@/types/emby'
  */
 export default function Home() {
   const navigate = useNavigate()
-  const { user, serverUrl, accessToken } = useAuthStore()
+  const { user, serverUrl, serverType, accessToken } = useAuthStore()
 
   // 创建媒体服务实例
   const mediaService = useMemo(() => {
     if (!serverUrl || !accessToken) return null
-    const apiClient = createEmbyClient({ serverUrl, accessToken })
+    const apiClient = createEmbyClient({
+      serverUrl,
+      serverType: serverType || undefined,
+      accessToken,
+    })
     return createMediaService(apiClient)
-  }, [serverUrl, accessToken])
+  }, [serverUrl, serverType, accessToken])
 
   // 获取用户 ID
   const userId = user?.id || ''
@@ -43,15 +48,11 @@ export default function Home() {
   // 获取顶级视图
   const {
     data: views = [],
-    isLoading: isLoadingViews,
-    error: viewsError,
   } = useMediaViews(mediaService!, userId, !!mediaService && !!userId)
 
   // 获取最新添加的媒体项（所有类型）
   const {
     data: latestItems = [],
-    isLoading: isLoadingLatest,
-    error: latestError,
   } = useLatestItems(
     mediaService!,
     userId,
@@ -88,26 +89,6 @@ export default function Home() {
     navigate(`/library/${type}?parentId=${view.id}`)
   }, [navigate])
 
-  /**
-   * 获取视图图标
-   */
-  const getViewIcon = (collectionType?: string): string => {
-    switch (collectionType) {
-      case 'movies':
-        return '🎬'
-      case 'tvshows':
-        return '📺'
-      case 'music':
-        return '🎵'
-      case 'books':
-        return '📚'
-      case 'games':
-        return '🎮'
-      default:
-        return '📁'
-    }
-  }
-
   // 轮播图当前索引状态（统一管理）
   const [heroIndex, setHeroIndex] = useState(0)
 
@@ -118,6 +99,7 @@ export default function Home() {
         <HeroBackground 
           items={latestItems.slice(0, 5)} 
           serverUrl={serverUrl}
+          serverType={serverType}
           currentIndex={heroIndex}
           onIndexChange={setHeroIndex}
         />
@@ -130,6 +112,7 @@ export default function Home() {
           <HeroContent 
             items={latestItems.slice(0, 5)} 
             serverUrl={serverUrl}
+            serverType={serverType}
             currentIndex={heroIndex}
             onIndexChange={setHeroIndex}
           />
@@ -258,11 +241,12 @@ const ViewLatestSection = React.memo(function ViewLatestSection({
 interface HeroBackgroundProps {
   items: MediaItem[]
   serverUrl: string | null
+  serverType: MediaServerType | null
   currentIndex: number
   onIndexChange: (index: number) => void
 }
 
-function HeroBackground({ items, serverUrl, currentIndex, onIndexChange }: HeroBackgroundProps) {
+function HeroBackground({ items, serverUrl, serverType, currentIndex, onIndexChange }: HeroBackgroundProps) {
   const [isAnimating, setIsAnimating] = useState(false)
 
   // 自动轮播
@@ -291,23 +275,21 @@ function HeroBackground({ items, serverUrl, currentIndex, onIndexChange }: HeroB
     if (!serverUrl) return null
 
     if (item.backdropImageTags && item.backdropImageTags.length > 0) {
-      const params = new URLSearchParams({
-        MaxWidth: '1920',
-        MaxHeight: '1080',
+      return buildApiUrl(serverUrl, `/Items/${item.id}/Images/Backdrop/0`, serverType || 'emby', {
+        MaxWidth: 1920,
+        MaxHeight: 1080,
         Tag: item.backdropImageTags[0],
-        Quality: '90',
+        Quality: 90,
       })
-      return `${serverUrl}/emby/Items/${item.id}/Images/Backdrop/0?${params.toString()}`
     }
 
     if (item.imageTags?.Primary) {
-      const params = new URLSearchParams({
-        MaxWidth: '1920',
-        MaxHeight: '1080',
+      return buildApiUrl(serverUrl, `/Items/${item.id}/Images/Primary`, serverType || 'emby', {
+        MaxWidth: 1920,
+        MaxHeight: 1080,
         Tag: item.imageTags.Primary,
-        Quality: '90',
+        Quality: 90,
       })
-      return `${serverUrl}/emby/Items/${item.id}/Images/Primary?${params.toString()}`
     }
 
     return null
@@ -348,11 +330,12 @@ function HeroBackground({ items, serverUrl, currentIndex, onIndexChange }: HeroB
 interface HeroContentProps {
   items: MediaItem[]
   serverUrl: string | null
+  serverType: MediaServerType | null
   currentIndex: number
   onIndexChange: (index: number) => void
 }
 
-function HeroContent({ items, serverUrl, currentIndex, onIndexChange }: HeroContentProps) {
+function HeroContent({ items, serverUrl, serverType, currentIndex, onIndexChange }: HeroContentProps) {
   const navigate = useNavigate()
 
   if (items.length === 0) return null
@@ -389,14 +372,12 @@ function HeroContent({ items, serverUrl, currentIndex, onIndexChange }: HeroCont
       return null
     }
 
-    const params = new URLSearchParams({
-      MaxWidth: '600',
-      MaxHeight: '200',
+    return buildApiUrl(serverUrl, `/Items/${item.id}/Images/Logo`, serverType || 'emby', {
+      MaxWidth: 600,
+      MaxHeight: 200,
       Tag: item.imageTags.Logo,
-      Quality: '90',
+      Quality: 90,
     })
-
-    return `${serverUrl}/emby/Items/${item.id}/Images/Logo?${params.toString()}`
   }
 
   const logoUrl = getLogoUrl(currentItem)
@@ -496,7 +477,12 @@ function HeroContent({ items, serverUrl, currentIndex, onIndexChange }: HeroCont
         <div className="absolute bottom-12 right-16 sm:right-24 lg:right-64 flex gap-4">
           {items.map((item, index) => {
             const thumbUrl = item.imageTags?.Primary && serverUrl
-              ? `${serverUrl}/emby/Items/${item.id}/Images/Primary?MaxWidth=200&MaxHeight=300&Tag=${item.imageTags.Primary}&Quality=90`
+              ? buildApiUrl(serverUrl, `/Items/${item.id}/Images/Primary`, serverType || 'emby', {
+                  MaxWidth: 200,
+                  MaxHeight: 300,
+                  Tag: item.imageTags.Primary,
+                  Quality: 90,
+                })
               : null
 
             return (

@@ -30,7 +30,6 @@ import {
   Settings,
   Languages,
   AudioLines,
-  RectangleHorizontal,
   Search,
 } from 'lucide-react'
 
@@ -174,13 +173,13 @@ export function VideoPlayer({
   onPlaybackEnd,
 }: VideoPlayerProps) {
   // 认证状态
-  const { user, serverUrl, accessToken } = useAuthStore()
+  const { user, serverUrl, serverType, accessToken } = useAuthStore()
   
   // 视频元素引用
   const videoRef = useRef<HTMLVideoElement>(null)
   
   // 视频服务引用（使用 serverUrl 和 accessToken 创建）
-  const videoServiceRef = useRef(createVideoService(serverUrl || '', accessToken || ''))
+  const videoServiceRef = useRef(createVideoService(serverUrl || '', accessToken || '', serverType || 'emby'))
   
   // 进度跟踪器引用
   const progressTrackerRef = useRef<ReturnType<typeof createProgressTracker> | null>(null)
@@ -345,6 +344,12 @@ export function VideoPlayer({
   }
   // 初始化播放器和事件监听
   useEffect(() => {
+    videoServiceRef.current = createVideoService(
+      serverUrl || '',
+      accessToken || '',
+      serverType || 'emby'
+    )
+
     const videoElement = videoRef.current
     const videoService = videoServiceRef.current
 
@@ -383,7 +388,10 @@ export function VideoPlayer({
 
     const handleTimeUpdate = () => {
       const positionTicks = videoService.getCurrentPositionTicks()
-      const isPaused = videoService.isPaused()
+      const isPaused = videoElement.paused || videoElement.ended
+
+      // 某些浏览器在全屏切换时 play/pause 事件可能丢失，这里用 timeupdate 自愈播放状态
+      setIsPlaying(!isPaused)
 
       // 更新本地时间状态 - 使用 ref 检查是否正在拖动
       if (!isDraggingProgressRef.current) {
@@ -547,12 +555,14 @@ export function VideoPlayer({
         if (!progressTrackerRef.current && serverUrl && accessToken) {
           const apiClient = createEmbyClient({
             serverUrl,
+            serverType: serverType || undefined,
             accessToken,
           })
           progressTrackerRef.current = createProgressTracker({
             apiClient,
             reportInterval: 10000, // 10 秒
             serverUrl, // 传递 serverUrl 用于 sendBeacon
+            serverType: serverType || 'emby',
             apiToken: accessToken, // 传递 API Token 用于 sendBeacon 认证
           })
         }
@@ -588,6 +598,7 @@ export function VideoPlayer({
             try {
               const apiClient = createEmbyClient({
                 serverUrl: serverUrl || '',
+                serverType: serverType || undefined,
                 accessToken: accessToken || undefined,
               })
               await apiClient.delete(`/Users/${user?.id}/PlayedItems/${mediaItem.id}`)
@@ -682,7 +693,7 @@ export function VideoPlayer({
       videoService.dispose()
       clearPlayback()
     }
-  }, [mediaItem.id, startPositionTicks, serverUrl, accessToken])
+  }, [mediaItem.id, startPositionTicks, serverUrl, serverType, accessToken, user?.id])
 
   // 处理自定义播放按钮点击
   const handlePlayButtonClick = () => {
@@ -769,31 +780,47 @@ export function VideoPlayer({
     setIsMuted(newMuted)
   }
 
+  // 调整音量（键盘快捷键使用）
+  const adjustVolume = (delta: number) => {
+    const videoService = videoServiceRef.current
+    const nextVolume = Math.max(0, Math.min(100, volume + delta))
+    videoService.setVolume(nextVolume)
+    setVolume(nextVolume)
+
+    if (nextVolume > 0 && isMuted) {
+      videoService.setMuted(false)
+      setIsMuted(false)
+    }
+  }
+
   // 快进/快退
-  const handleSkipForward = () => {
+  const seekBySeconds = (seconds: number) => {
     const videoElement = videoRef.current
     if (!videoElement) return
-    
-    const newTime = Math.min(currentTime + 10, duration)
+
+    const totalDuration =
+      Number.isFinite(videoElement.duration) && videoElement.duration > 0
+        ? videoElement.duration
+        : duration
+    if (!totalDuration || isNaN(totalDuration)) return
+
+    const now = Number.isFinite(videoElement.currentTime) ? videoElement.currentTime : currentTime
+    const newTime = Math.max(0, Math.min(now + seconds, totalDuration))
+
     videoElement.currentTime = newTime
     setCurrentTime(newTime)
-    
+
     setTimeout(() => {
       reportProgress('TimeUpdate')
     }, 100)
   }
 
+  const handleSkipForward = () => {
+    seekBySeconds(10)
+  }
+
   const handleSkipBackward = () => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-    
-    const newTime = Math.max(currentTime - 10, 0)
-    videoElement.currentTime = newTime
-    setCurrentTime(newTime)
-    
-    setTimeout(() => {
-      reportProgress('TimeUpdate')
-    }, 100)
+    seekBySeconds(-10)
   }
   // 切换全屏
   const toggleFullscreen = () => {
@@ -933,6 +960,12 @@ export function VideoPlayer({
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
+
+      // 全屏切换后同步一次真实播放状态，避免弹幕暂停状态卡住
+      const videoElement = videoRef.current
+      if (videoElement) {
+        setIsPlaying(!videoElement.paused && !videoElement.ended)
+      }
     }
 
     document.addEventListener('fullscreenchange', handleFullscreenChange)
@@ -997,6 +1030,72 @@ export function VideoPlayer({
   const toggleDanmaku = () => {
     updateDanmakuSettings({ enabled: !danmakuSettings.enabled })
   }
+
+  // 键盘快捷键
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (isEditableTarget(e.target)) return
+
+      switch (e.key) {
+        case ' ':
+        case 'k':
+        case 'K':
+          // 防止长按空格连续触发播放/暂停抖动
+          if (e.repeat) return
+          e.preventDefault()
+          handlePlayButtonClick()
+          return
+        case 'ArrowLeft':
+          e.preventDefault()
+          handleSkipBackward()
+          return
+        case 'ArrowRight':
+          e.preventDefault()
+          handleSkipForward()
+          return
+        case 'ArrowUp':
+          e.preventDefault()
+          adjustVolume(5)
+          return
+        case 'ArrowDown':
+          e.preventDefault()
+          adjustVolume(-5)
+          return
+        case 'm':
+        case 'M':
+          if (e.repeat) return
+          e.preventDefault()
+          toggleMute()
+          return
+        case 'f':
+        case 'F':
+          if (e.repeat) return
+          e.preventDefault()
+          toggleFullscreen()
+          return
+        case 'd':
+        case 'D':
+          if (e.repeat) return
+          e.preventDefault()
+          toggleDanmaku()
+          return
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [volume, isMuted, currentTime, duration, danmakuSettings.enabled, isFullscreen])
 
   // 处理手动选择弹幕
   const handleSelectDanmaku = (episodeId: string, animeTitle: string, episodeTitle: string) => {
@@ -1072,7 +1171,7 @@ export function VideoPlayer({
         {/* 弹幕 Canvas - 覆盖在视频上方 */}
         {danmakuSettings.enabled && hasDanmaku && (
           <DanmakuCanvas
-            key={aspectRatioMode} // 添加 key，切换宽高比时重新挂载
+            key={`${aspectRatioMode}-${isFullscreen ? 'fs' : 'windowed'}`} // 全屏切换时重建弹幕层，避免状态残留
             currentTime={currentTime}
             isPaused={!isPlaying}
             videoRef={videoRef}

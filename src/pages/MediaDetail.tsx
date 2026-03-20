@@ -14,13 +14,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { createEmbyClient } from '@/services/api/embyClient'
+import { buildApiUrl, type MediaServerType } from '@/services/api/mediaServer'
 import { createMediaService } from '@/services/media/mediaService'
 import { useMediaDetail, useMediaItems, useSimilarItems } from '@/hooks/useMedia'
 import Layout from '@/components/layout/Layout'
 import { ArrowLeft, Star, Heart, ExternalLink, Youtube } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import MediaCard from '@/components/media/MediaCard'
-import MediaGrid from '@/components/media/MediaGrid'
 import type { MediaStream, MediaItem } from '@/types/emby'
 
 /**
@@ -99,12 +99,14 @@ function SeasonsWithEpisodes({
   seasons, 
   mediaService, 
   userId,
-  serverUrl
+  serverUrl,
+  serverType,
 }: { 
   seasons: MediaItem[]
   mediaService: any
   userId: string
   serverUrl: string
+  serverType: MediaServerType
 }) {
   const navigate = useNavigate()
   const [selectedSeasonIndex, setSelectedSeasonIndex] = useState(0)
@@ -156,7 +158,12 @@ function SeasonsWithEpisodes({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {episodes.map((episode) => {
           const imageUrl = episode.imageTags?.Primary
-            ? `${serverUrl}/emby/Items/${episode.id}/Images/Primary?MaxWidth=600&MaxHeight=338&Tag=${episode.imageTags.Primary}&Quality=90`
+            ? buildApiUrl(serverUrl, `/Items/${episode.id}/Images/Primary`, serverType, {
+                MaxWidth: 600,
+                MaxHeight: 338,
+                Tag: episode.imageTags.Primary,
+                Quality: 90,
+              })
             : null
           
           return (
@@ -234,18 +241,12 @@ function formatBitrate(bitrate?: number): string {
  */
 function getImageUrl(
   serverUrl: string,
+  serverType: MediaServerType,
   itemId: string,
   imageType: string,
-  tag?: string
+  query?: Record<string, string | number | boolean | null | undefined>
 ): string {
-  const baseUrl = serverUrl.replace(/\/$/, '')
-  let url = `${baseUrl}/emby/Items/${itemId}/Images/${imageType}`
-  
-  if (tag) {
-    url += `?tag=${tag}`
-  }
-  
-  return url
+  return buildApiUrl(serverUrl, `/Items/${itemId}/Images/${imageType}`, serverType, query)
 }
 
 /**
@@ -254,11 +255,12 @@ function getImageUrl(
 export default function MediaDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user, serverUrl, accessToken } = useAuthStore()
+  const { user, serverUrl, serverType, accessToken } = useAuthStore()
   
   // 创建服务实例
   const apiClient = createEmbyClient({
     serverUrl: serverUrl || '',
+    serverType: serverType || undefined,
     accessToken: accessToken || undefined,
   })
   const mediaService = createMediaService(apiClient)
@@ -365,7 +367,7 @@ export default function MediaDetail() {
   }, [isSeason, episodes, navigate])
   
   // 获取相似内容（需求 3.8）
-  const { data: similarItems, isLoading: isSimilarLoading } = useSimilarItems(
+  const { data: similarItems } = useSimilarItems(
     mediaService,
     user?.id || '',
     id || '',
@@ -403,15 +405,15 @@ export default function MediaDetail() {
   
   // 获取图片 URL
   const backdropUrl = item.backdropImageTags?.[0] && serverUrl
-    ? getImageUrl(serverUrl, item.id, 'Backdrop', item.backdropImageTags[0])
+    ? getImageUrl(serverUrl, serverType || 'emby', item.id, 'Backdrop', { tag: item.backdropImageTags[0] })
     : undefined
     
   const primaryImageUrl = item.imageTags?.Primary && serverUrl
-    ? getImageUrl(serverUrl, item.id, 'Primary', item.imageTags.Primary)
+    ? getImageUrl(serverUrl, serverType || 'emby', item.id, 'Primary', { tag: item.imageTags.Primary })
     : undefined
     
   const logoUrl = item.imageTags?.Logo && serverUrl
-    ? getImageUrl(serverUrl, item.id, 'Logo', item.imageTags.Logo)
+    ? getImageUrl(serverUrl, serverType || 'emby', item.id, 'Logo', { tag: item.imageTags.Logo })
     : undefined
   
   // 获取媒体源信息
@@ -797,6 +799,7 @@ export default function MediaDetail() {
                       mediaService={mediaService}
                       userId={user?.id || ''}
                       serverUrl={serverUrl || ''}
+                      serverType={serverType || 'emby'}
                     />
                   </div>
                 )}
@@ -827,7 +830,12 @@ export default function MediaDetail() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                       {sameSeasonEpisodes.map((episode) => {
                         const imageUrl = episode.imageTags?.Primary && serverUrl
-                          ? `${serverUrl}/emby/Items/${episode.id}/Images/Primary?MaxWidth=600&MaxHeight=338&Tag=${episode.imageTags.Primary}&Quality=90`
+                          ? buildApiUrl(serverUrl, `/Items/${episode.id}/Images/Primary`, serverType || 'emby', {
+                              MaxWidth: 600,
+                              MaxHeight: 338,
+                              Tag: episode.imageTags.Primary,
+                              Quality: 90,
+                            })
                           : null
                         
                         const isCurrentEpisode = episode.id === item.id
@@ -894,7 +902,12 @@ export default function MediaDetail() {
                       <div className="relative mb-3 w-full overflow-hidden rounded-lg bg-white/5" style={{ paddingBottom: '150%' }}>
                         {person.primaryImageTag && serverUrl ? (
                           <img
-                            src={`${serverUrl}/emby/Items/${person.id}/Images/Primary?MaxWidth=200&MaxHeight=300&Tag=${person.primaryImageTag}&Quality=90`}
+                            src={buildApiUrl(serverUrl, `/Items/${person.id}/Images/Primary`, serverType || 'emby', {
+                              MaxWidth: 200,
+                              MaxHeight: 300,
+                              Tag: person.primaryImageTag,
+                              Quality: 90,
+                            })}
                             alt={person.name}
                             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
@@ -1070,7 +1083,12 @@ export default function MediaDetail() {
                 <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-8 px-8">
                   {similarItems.map((similarItem) => {
                     const imageUrl = similarItem.imageTags?.Primary && serverUrl
-                      ? `${serverUrl}/emby/Items/${similarItem.id}/Images/Primary?MaxWidth=200&MaxHeight=300&Tag=${similarItem.imageTags.Primary}&Quality=90`
+                      ? buildApiUrl(serverUrl, `/Items/${similarItem.id}/Images/Primary`, serverType || 'emby', {
+                          MaxWidth: 200,
+                          MaxHeight: 300,
+                          Tag: similarItem.imageTags.Primary,
+                          Quality: 90,
+                        })
                       : null
                     
                     return (

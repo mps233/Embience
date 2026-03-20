@@ -32,7 +32,7 @@ export default function Library() {
   const { type } = useParams<{ type: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user, serverUrl, accessToken } = useAuthStore()
+  const { user, serverUrl, serverType, accessToken } = useAuthStore()
   
   const parentId = searchParams.get('parentId')
   
@@ -51,6 +51,7 @@ export default function Library() {
   // 创建服务实例
   const apiClient = createEmbyClient({
     serverUrl: serverUrl || '',
+    serverType: serverType || undefined,
     accessToken: accessToken || undefined,
   })
   const mediaService = createMediaService(apiClient)

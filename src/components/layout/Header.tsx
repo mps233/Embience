@@ -33,7 +33,7 @@ import { createEmbyClient } from '@/services/api/embyClient'
 export default function Header() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, serverUrl } = useAuthStore()
+  const { user, serverUrl, serverType } = useAuthStore()
   const navRef = useRef<HTMLDivElement>(null)
   
   // 判断是否是首页
@@ -176,9 +176,12 @@ export default function Header() {
   // 创建认证服务实例
   const authService = useMemo(() => {
     if (!serverUrl) return null
-    const apiClient = createEmbyClient({ serverUrl })
+    const apiClient = createEmbyClient({
+      serverUrl,
+      serverType: serverType || undefined,
+    })
     return createAuthService(apiClient)
-  }, [serverUrl])
+  }, [serverUrl, serverType])
 
   // 使用登出 Hook
   const { mutate: logout, isPending: isLoggingOut } = useLogout(authService!)

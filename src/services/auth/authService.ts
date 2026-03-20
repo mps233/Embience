@@ -122,11 +122,12 @@ export class AuthService {
       this.apiClient.setAccessToken(transformedSession.accessToken)
 
       // 获取服务器 URL（从 API 客户端配置中获取）
-      const serverUrl = this.apiClient['baseURL'] // 访问私有属性
+      const serverUrl = this.apiClient.getServerUrl()
+      const serverType = this.apiClient.getServerType()
 
       // 存储认证信息到 Store
       const authStore = useAuthStore.getState()
-      authStore.setAuth(transformedSession, serverUrl)
+      authStore.setAuth(transformedSession, serverUrl, serverType)
 
       return transformedSession
     } catch (error) {
@@ -162,10 +163,13 @@ export class AuthService {
   async logout(): Promise<void> {
     try {
       // 调用登出端点
-      await this.apiClient.post(authEndpoints.logout())
+      await this.apiClient.post(authEndpoints.logout(), undefined, { noRetry: true })
     } catch (error) {
-      // 即使服务器登出失败，也要清除本地凭据
-      console.error('服务器登出失败（将继续清除本地凭据）:', error)
+      // 会话已失效时，401 属于可接受状态，直接静默继续清理本地凭据
+      if (!(error instanceof Error && error.message.includes('会话已过期'))) {
+        // 即使服务器登出失败，也要清除本地凭据
+        console.error('服务器登出失败（将继续清除本地凭据）:', error)
+      }
     } finally {
       // 清除本地认证信息
       const authStore = useAuthStore.getState()

@@ -7,6 +7,10 @@
 import type { EmbyApiClient } from '@/services/api/embyClient'
 import type { PlaySessionInfo, PlaybackProgressReport } from '@/types/player'
 import { playbackEndpoints } from '@/services/api/endpoints/playback'
+import {
+  buildAuthenticatedApiUrl,
+  type MediaServerType,
+} from '@/services/api/mediaServer'
 
 /**
  * 进度跟踪器配置
@@ -18,6 +22,8 @@ export interface ProgressTrackerConfig {
   reportInterval?: number
   /** 服务器 URL（用于 sendBeacon） */
   serverUrl?: string
+  /** 服务器类型（用于 sendBeacon） */
+  serverType?: MediaServerType
   /** API Token（用于 sendBeacon 认证） */
   apiToken?: string
 }
@@ -46,6 +52,7 @@ export class ProgressTracker {
   private apiClient: EmbyApiClient
   private reportInterval: number
   private serverUrl: string
+  private serverType: MediaServerType
   private apiToken: string
   private timerId: number | null = null
   private currentSession: PlaySessionInfo | null = null
@@ -60,8 +67,9 @@ export class ProgressTracker {
   constructor(config: ProgressTrackerConfig) {
     this.apiClient = config.apiClient
     this.reportInterval = config.reportInterval || 10000 // 默认 10 秒
-    this.serverUrl = config.serverUrl || ''
-    this.apiToken = config.apiToken || ''
+    this.serverUrl = config.serverUrl || this.apiClient.getServerUrl()
+    this.serverType = config.serverType || this.apiClient.getServerType()
+    this.apiToken = config.apiToken || this.apiClient.getAccessToken() || ''
     
     // 初始化网络状态
     this.isOnline = navigator.onLine
@@ -237,8 +245,13 @@ export class ProgressTracker {
     }
 
     try {
-      // 使用 Progress 端点而不是 Stopped，避免 Emby 重置播放位置
-      const endpoint = `${this.serverUrl}${playbackEndpoints.reportPlaybackProgress()}?api_key=${encodeURIComponent(this.apiToken)}`
+      // 使用 Progress 端点而不是 Stopped，避免服务器重置播放位置
+      const endpoint = buildAuthenticatedApiUrl(
+        this.serverUrl,
+        playbackEndpoints.reportPlaybackProgress(),
+        this.apiToken,
+        this.serverType
+      )
       const data = JSON.stringify(report)
       const blob = new Blob([data], { type: 'application/json' })
       

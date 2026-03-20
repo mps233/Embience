@@ -13,7 +13,7 @@ import { createMediaService } from '../services/media/mediaService'
  * 提供媒体内容搜索功能和流派浏览功能
  */
 export default function Search() {
-  const { user, serverUrl, accessToken } = useAuthStore()
+  const { user, serverUrl, serverType, accessToken } = useAuthStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [selectedType, setSelectedType] = useState<'all' | 'Movie' | 'Series' | 'Audio'>('all')
@@ -21,6 +21,7 @@ export default function Search() {
   // 创建服务实例
   const apiClient = createEmbyClient({
     serverUrl: serverUrl || '',
+    serverType: serverType || undefined,
     accessToken: accessToken || undefined,
   })
   const mediaService = createMediaService(apiClient)

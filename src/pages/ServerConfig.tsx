@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { createEmbyClient } from '@/services/api/embyClient'
+import { detectMediaServer, formatServerUrl } from '@/services/api/mediaServer'
 import { useAuthStore } from '@/stores/authStore'
 import type { SystemInfo } from '@/types/emby'
 
@@ -33,14 +34,6 @@ function validateServerUrl(url: string): boolean {
   } catch {
     return false
   }
-}
-
-/**
- * 格式化服务器 URL
- * 移除末尾的斜杠
- */
-function formatServerUrl(url: string): string {
-  return url.replace(/\/$/, '')
 }
 
 export default function ServerConfig() {
@@ -73,9 +66,13 @@ export default function ServerConfig() {
     try {
       // 格式化 URL
       const formattedUrl = formatServerUrl(serverUrl)
+      const connection = await detectMediaServer(formattedUrl)
 
       // 创建临时 API 客户端
-      const client = createEmbyClient({ serverUrl: formattedUrl })
+      const client = createEmbyClient({
+        serverUrl: connection.serverUrl,
+        serverType: connection.serverType,
+      })
 
       // 尝试调用 Users/Public 端点验证连接
       // 这个端点通常是公开的，不需要认证
@@ -90,7 +87,7 @@ export default function ServerConfig() {
       }
 
       // 存储服务器 URL 到 authStore
-      useAuthStore.setState({ serverUrl: formattedUrl })
+      useAuthStore.getState().setServerUrl(connection.serverUrl, connection.serverType)
 
       // 导航到登录页面
       navigate('/login')
@@ -102,7 +99,7 @@ export default function ServerConfig() {
         if (err.message.includes('网络连接失败')) {
           setError('无法连接到服务器，请检查服务器地址和网络连接')
         } else if (err.message.includes('请求失败')) {
-          setError('服务器响应异常，请确认这是一个有效的 Emby 服务器地址')
+          setError('服务器响应异常，请确认这是一个有效的 Emby 或 Jellyfin 服务器地址')
         } else {
           setError(`连接失败: ${err.message}`)
         }
@@ -119,10 +116,10 @@ export default function ServerConfig() {
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/15 bg-white/8 backdrop-blur-2xl shadow-glass-xl dark:bg-white/5 dark:border-white/10">
         <div className="p-6 space-y-1">
           <h2 className="text-2xl font-bold text-center">
-            配置 Emby 服务器
+            配置媒体服务器
           </h2>
           <p className="text-center text-muted-foreground">
-            请输入您的 Emby 服务器地址以开始使用
+            请输入您的 Emby 或 Jellyfin 服务器地址以开始使用
           </p>
         </div>
 

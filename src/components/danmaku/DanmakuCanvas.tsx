@@ -26,7 +26,7 @@ interface DanmakuCanvasProps {
 export default function DanmakuCanvas({
   currentTime,
   isPaused,
-  videoRef,
+  videoRef: _videoRef,
 }: DanmakuCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const engineRef = useRef<DanmakuEngine | null>(null)

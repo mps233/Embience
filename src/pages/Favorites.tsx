@@ -11,12 +11,13 @@ import { createMediaService } from '../services/media/mediaService'
  * 显示用户收藏的所有媒体项目
  */
 export default function Favorites() {
-  const { user, serverUrl, accessToken } = useAuthStore()
+  const { user, serverUrl, serverType, accessToken } = useAuthStore()
   const [selectedType, setSelectedType] = useState<'all' | 'Movie' | 'Series' | 'Audio'>('all')
 
   // 创建服务实例
   const apiClient = createEmbyClient({
     serverUrl: serverUrl || '',
+    serverType: serverType || undefined,
     accessToken: accessToken || undefined,
   })
   const mediaService = createMediaService(apiClient)

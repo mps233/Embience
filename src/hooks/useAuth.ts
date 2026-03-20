@@ -150,9 +150,15 @@ export function useLogout(authService: AuthService | null) {
  * @param authService - 认证服务实例（可以为 null）
  * @returns 认证状态、查询结果和操作方法
  */
-export function useAuth(authService: AuthService | null) {
+export function useAuth(
+  authService: AuthService | null,
+  options?: {
+    loadPublicUsers?: boolean
+  }
+) {
+  const loadPublicUsers = options?.loadPublicUsers ?? true
   const authState = useAuthState()
-  const publicUsersQuery = usePublicUsers(authService, true) // 始终启用公开用户查询
+  const publicUsersQuery = usePublicUsers(authService, loadPublicUsers)
   const loginMutation = useLogin(authService)
   const logoutMutation = useLogout(authService)
 

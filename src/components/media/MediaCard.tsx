@@ -17,6 +17,7 @@ import { Play, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import type { MediaItem } from '@/types/emby'
+import { buildApiUrl } from '@/services/api/mediaServer'
 
 /**
  * MediaCard 组件属性
@@ -47,7 +48,7 @@ export default function MediaCard({
   imageHeight = 450,
 }: MediaCardProps) {
   const navigate = useNavigate()
-  const { serverUrl } = useAuthStore()
+  const { serverUrl, serverType } = useAuthStore()
   
   // 图片懒加载状态
   const [isImageLoaded, setIsImageLoaded] = useState(false)
@@ -93,14 +94,12 @@ export default function MediaCard({
       return null
     }
 
-    const params = new URLSearchParams({
-      MaxWidth: imageWidth.toString(),
-      MaxHeight: imageHeight.toString(),
+    return buildApiUrl(serverUrl, `/Items/${item.id}/Images/Primary`, serverType || 'emby', {
+      MaxWidth: imageWidth,
+      MaxHeight: imageHeight,
       Tag: item.imageTags.Primary,
-      Quality: '90',
+      Quality: 90,
     })
-
-    return `${serverUrl}/emby/Items/${item.id}/Images/Primary?${params.toString()}`
   }
 
   /**

@@ -8,8 +8,6 @@
 
 import type {
   DanmakuAnimeResult,
-  DanmakuEpisodeResult,
-  DanmakuSearchResult,
   DanmakuApiResponse,
   DanmakuItem,
   PostDanmakuRequest,

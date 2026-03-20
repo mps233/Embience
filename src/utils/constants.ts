@@ -64,6 +64,7 @@ export const STORAGE_KEYS = {
   AUTH_TOKEN: 'emby_auth_token',
   USER_INFO: 'emby_user_info',
   SERVER_URL: 'emby_server_url',
+  SERVER_TYPE: 'media_server_type',
   DEVICE_INFO: 'emby_device_info',
   THEME: 'emby_theme',
   FILTER_PREFERENCES: 'emby_filter_preferences',

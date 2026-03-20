@@ -247,7 +247,7 @@ describe('AuthService', () => {
       await authService.logout()
 
       // 验证 API 调用
-      expect(mockApiClient.post).toHaveBeenCalledWith('/Sessions/Logout')
+      expect(mockApiClient.post).toHaveBeenCalledWith('/Sessions/Logout', undefined, { noRetry: true })
 
       // 验证访问令牌已清除
       expect(mockApiClient.setAccessToken).toHaveBeenCalledWith(null)

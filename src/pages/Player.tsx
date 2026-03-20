@@ -11,6 +11,7 @@ import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { createEmbyClient } from '@/services/api/embyClient'
+import { buildAuthenticatedApiUrl } from '@/services/api/mediaServer'
 import { createMediaService } from '@/services/media/mediaService'
 import { useMediaDetail, useMediaItems } from '@/hooks/useMedia'
 import { VideoPlayer } from '@/components/player/VideoPlayer'
@@ -23,11 +24,12 @@ import { Star } from 'lucide-react'
 export default function Player() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user, serverUrl, accessToken } = useAuthStore()
+  const { user, serverUrl, serverType, accessToken } = useAuthStore()
   
   // 创建服务实例
   const apiClient = createEmbyClient({
     serverUrl: serverUrl || '',
+    serverType: serverType || undefined,
     accessToken: accessToken || undefined,
   })
   const mediaService = createMediaService(apiClient)
@@ -66,14 +68,22 @@ export default function Player() {
   
   // 如果视频已被标记为"已播放"，取消标记以便正常保存播放进度
   useEffect(() => {
-    if (mediaItem?.userData?.played && user?.id) {
-      fetch(`${serverUrl}/emby/Users/${user.id}/PlayedItems/${mediaItem.id}?api_key=${accessToken}`, {
-        method: 'DELETE',
-      }).catch((error) => {
+    if (mediaItem?.userData?.played && user?.id && serverUrl && accessToken) {
+      fetch(
+        buildAuthenticatedApiUrl(
+          serverUrl,
+          `/Users/${user.id}/PlayedItems/${mediaItem.id}`,
+          accessToken,
+          serverType || 'emby'
+        ),
+        {
+          method: 'DELETE',
+        }
+      ).catch((error) => {
         console.error('取消"已播放"标记失败:', error)
       })
     }
-  }, [mediaItem, user?.id, serverUrl, accessToken])
+  }, [mediaItem, user?.id, serverUrl, accessToken, serverType])
   
   // 加载状态
   if (isLoading) {

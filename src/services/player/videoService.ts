@@ -9,6 +9,12 @@ import 'video.js/dist/video-js.css'
 import type Player from 'video.js/dist/types/player'
 import type { MediaItem, MediaSource } from '@/types/emby'
 import type { PlaybackOptions, AudioTrack, SubtitleTrack, PlayMethod } from '@/types/player'
+import {
+  getApiBaseUrl,
+  getTokenHeaderName,
+  getTokenQueryParamName,
+  type MediaServerType,
+} from '@/services/api/mediaServer'
 
 /**
  * 视频服务类
@@ -19,10 +25,12 @@ export class VideoService {
   private lastError: Error | null = null
   private serverUrl: string
   private accessToken: string
+  private serverType: MediaServerType
 
-  constructor(serverUrl: string, accessToken: string) {
+  constructor(serverUrl: string, accessToken: string, serverType: MediaServerType = 'emby') {
     this.serverUrl = serverUrl
     this.accessToken = accessToken
+    this.serverType = serverType
   }
 
   /**
@@ -103,7 +111,7 @@ export class VideoService {
       const response = await fetch(testUrl, {
         method: 'GET',
         headers: {
-          'X-Emby-Token': this.accessToken
+          [getTokenHeaderName(this.serverType)]: this.accessToken
         },
         timeout: 5000 // 5秒超时
       } as RequestInit)
@@ -115,7 +123,7 @@ export class VideoService {
       console.log('服务器连接测试成功')
     } catch (error) {
       console.error('服务器连接测试失败:', error)
-      throw new Error(`无法连接到 Emby 服务器: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw new Error(`无法连接到媒体服务器: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
 
@@ -469,7 +477,7 @@ export class VideoService {
     // 基础参数
     params.append('MediaSourceId', mediaSource.id)
     params.append('PlaySessionId', playSessionId)
-    params.append('api_key', this.getApiKey())
+    params.append(getTokenQueryParamName(this.serverType), this.getApiKey())
 
     // 支持外部流（STRM 文件）
     params.append('EnableRedirection', 'true')
@@ -970,8 +978,8 @@ export class VideoService {
     
     // 移除末尾的斜杠
     baseUrl = baseUrl.replace(/\/$/, '')
-    
-    const finalUrl = `${baseUrl}/emby`
+
+    const finalUrl = getApiBaseUrl(baseUrl, this.serverType)
     console.log('基础 URL:', finalUrl)
     
     return finalUrl
@@ -983,9 +991,13 @@ export class VideoService {
  * 
  * @param serverUrl - 服务器 URL
  * @param accessToken - 访问令牌
+ * @param serverType - 服务器类型
  * @returns 视频服务实例
  */
-export function createVideoService(serverUrl: string, accessToken: string): VideoService {
-  return new VideoService(serverUrl, accessToken)
+export function createVideoService(
+  serverUrl: string,
+  accessToken: string,
+  serverType: MediaServerType = 'emby'
+): VideoService {
+  return new VideoService(serverUrl, accessToken, serverType)
 }
-

@@ -10,6 +10,7 @@ import type { User, AuthSession, DeviceInfo } from '@/types/emby'
 import { getStorageItem, setStorageItem, removeStorageItem } from '@/utils/storage'
 import { STORAGE_KEYS, APP_VERSION, CLIENT_NAME } from '@/utils/constants'
 import { v4 as uuidv4 } from 'uuid'
+import type { MediaServerType } from '@/services/api/mediaServer'
 
 /**
  * 认证状态接口
@@ -19,12 +20,13 @@ interface AuthState {
   user: User | null
   accessToken: string | null
   serverUrl: string | null
+  serverType: MediaServerType | null
   deviceInfo: DeviceInfo
   isAuthenticated: boolean
 
   // 操作
-  setServerUrl: (url: string) => void
-  setAuth: (session: AuthSession, serverUrl: string) => void
+  setServerUrl: (url: string, serverType?: MediaServerType) => void
+  setAuth: (session: AuthSession, serverUrl: string, serverType?: MediaServerType) => void
   clearAuth: () => void
   updateUser: (user: User) => void
   initializeFromStorage: () => void
@@ -84,6 +86,7 @@ export const useAuthStore = create<AuthState>((set) => {
   const storedUser = getStorageItem<User>(STORAGE_KEYS.USER_INFO)
   const storedAccessToken = getStorageItem<string>(STORAGE_KEYS.AUTH_TOKEN)
   const storedServerUrl = getStorageItem<string>(STORAGE_KEYS.SERVER_URL)
+  const storedServerType = getStorageItem<MediaServerType>(STORAGE_KEYS.SERVER_TYPE)
   const isAuthenticated = !!(storedUser && storedAccessToken && storedServerUrl)
 
   return {
@@ -91,6 +94,7 @@ export const useAuthStore = create<AuthState>((set) => {
     user: storedUser,
     accessToken: storedAccessToken,
     serverUrl: storedServerUrl,
+    serverType: storedServerType || (storedServerUrl ? 'emby' : null),
     deviceInfo: getOrCreateDeviceInfo(),
     isAuthenticated,
 
@@ -99,13 +103,18 @@ export const useAuthStore = create<AuthState>((set) => {
      * 
      * @param url - 服务器 URL
      */
-    setServerUrl: (url: string) => {
-    // 持久化到 localStorage
-    setStorageItem(STORAGE_KEYS.SERVER_URL, url)
+    setServerUrl: (url: string, serverType?: MediaServerType) => {
+      setStorageItem(STORAGE_KEYS.SERVER_URL, url)
 
-    // 更新状态
-    set({ serverUrl: url })
-  },
+      if (serverType) {
+        setStorageItem(STORAGE_KEYS.SERVER_TYPE, serverType)
+      }
+
+      set({
+        serverUrl: url,
+        serverType: serverType ?? getStorageItem<MediaServerType>(STORAGE_KEYS.SERVER_TYPE) ?? 'emby',
+      })
+    },
 
   /**
    * 设置认证信息
@@ -113,19 +122,24 @@ export const useAuthStore = create<AuthState>((set) => {
    * @param session - 认证会话信息
    * @param serverUrl - 服务器 URL
    */
-  setAuth: (session: AuthSession, serverUrl: string) => {
+  setAuth: (session: AuthSession, serverUrl: string, serverType?: MediaServerType) => {
     const { user, accessToken } = session
 
     // 持久化到 localStorage
     setStorageItem(STORAGE_KEYS.USER_INFO, user)
     setStorageItem(STORAGE_KEYS.AUTH_TOKEN, accessToken)
     setStorageItem(STORAGE_KEYS.SERVER_URL, serverUrl)
+    setStorageItem(
+      STORAGE_KEYS.SERVER_TYPE,
+      serverType ?? getStorageItem<MediaServerType>(STORAGE_KEYS.SERVER_TYPE) ?? 'emby'
+    )
 
     // 更新状态
     set({
       user,
       accessToken,
       serverUrl,
+      serverType: serverType ?? getStorageItem<MediaServerType>(STORAGE_KEYS.SERVER_TYPE) ?? 'emby',
       isAuthenticated: true,
     })
   },
@@ -138,12 +152,14 @@ export const useAuthStore = create<AuthState>((set) => {
     removeStorageItem(STORAGE_KEYS.USER_INFO)
     removeStorageItem(STORAGE_KEYS.AUTH_TOKEN)
     removeStorageItem(STORAGE_KEYS.SERVER_URL)
+    removeStorageItem(STORAGE_KEYS.SERVER_TYPE)
 
     // 重置状态
     set({
       user: null,
       accessToken: null,
       serverUrl: null,
+      serverType: null,
       isAuthenticated: false,
     })
   },
@@ -169,6 +185,7 @@ export const useAuthStore = create<AuthState>((set) => {
     const user = getStorageItem<User>(STORAGE_KEYS.USER_INFO)
     const accessToken = getStorageItem<string>(STORAGE_KEYS.AUTH_TOKEN)
     const serverUrl = getStorageItem<string>(STORAGE_KEYS.SERVER_URL)
+    const serverType = getStorageItem<MediaServerType>(STORAGE_KEYS.SERVER_TYPE)
 
     // 只有当所有必需信息都存在时才认为已认证
     const isAuthenticated = !!(user && accessToken && serverUrl)
@@ -177,6 +194,7 @@ export const useAuthStore = create<AuthState>((set) => {
       user,
       accessToken,
       serverUrl,
+      serverType: serverType || (serverUrl ? 'emby' : null),
       isAuthenticated,
     })
   },
@@ -202,6 +220,11 @@ export const selectAccessToken = (state: AuthState) => state.accessToken
  * 选择器：获取服务器 URL
  */
 export const selectServerUrl = (state: AuthState) => state.serverUrl
+
+/**
+ * 选择器：获取服务器类型
+ */
+export const selectServerType = (state: AuthState) => state.serverType
 
 /**
  * 选择器：获取设备信息
