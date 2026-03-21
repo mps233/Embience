@@ -93,6 +93,7 @@ VITE_CLIENT_NAME=Emby Web
 ```
 
 说明：实际服务器地址通常在应用内的 `/server-config` 页面配置与保存。
+说明：上面的 `.env.local` 主要用于本地开发或本地构建。
 
 ### 开发与构建
 
@@ -140,6 +141,67 @@ src/
 ## 部署说明
 
 项目为标准 Vite SPA，构建产物在 `dist/`。部署到任意静态托管平台时，请确保启用 SPA fallback（将未知路由回退到 `index.html`）。
+
+### Docker Hub
+
+推荐直接使用已经发布好的镜像：
+
+```bash
+docker pull miaona/embience:latest
+```
+
+最简单的启动方式：
+
+```bash
+docker run -d \
+  --name embience \
+  -p 27880:80 \
+  miaona/embience:latest
+```
+
+启动后访问：
+
+```text
+http://<你的主机IP>:27880
+```
+
+### Docker 运行时配置
+
+镜像支持运行时配置。容器启动时会自动生成 `/config.js`，所以用户只需要在 `docker run` 时通过 `-e` 传参，不需要自己重新 build 镜像。
+
+完整示例：
+
+```bash
+docker run -d \
+  --name embience \
+  -p 27880:80 \
+  -e VITE_EMBY_SERVER_URL=http://192.168.50.210:8091 \
+  -e VITE_DANMAKU_API_URL=https://your-danmaku-api.example.com \
+  -e VITE_APP_VERSION=1.0.0 \
+  -e VITE_APP_NAME="Embience" \
+  -e VITE_CLIENT_NAME="Emby Web" \
+  miaona/embience:latest
+```
+
+常见用法：
+
+- 如果你希望用户自己在 `/server-config` 页面填写媒体服务器地址，可以不传 `VITE_EMBY_SERVER_URL`。
+- 如果你希望弹幕功能开箱即用，建议传入可访问的 `VITE_DANMAKU_API_URL`。
+- 修改环境变量后，删除旧容器并重新创建即可，不需要重新构建镜像。
+
+### 镜像发布
+
+仓库已配置 GitHub Actions 自动构建并推送 Docker Hub 镜像：
+
+- 推送到 `main` 分支时自动发布
+- 推送 `v*.*.*` 标签时自动发布对应版本标签
+- 也支持手动触发工作流
+
+默认镜像地址为：
+
+```text
+miaona/embience
+```
 
 ## Screenshots
 

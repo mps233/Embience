@@ -2,15 +2,16 @@
  * 应用常量配置
  */
 
+import { runtimeConfig } from '@/config/runtimeConfig'
+
 // 应用信息
-export const APP_NAME = import.meta.env.VITE_APP_NAME || 'Embience'
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0'
-export const CLIENT_NAME = import.meta.env.VITE_CLIENT_NAME || 'Embience Web'
+export const APP_NAME = runtimeConfig.appName
+export const APP_VERSION = runtimeConfig.appVersion
+export const CLIENT_NAME = runtimeConfig.clientName
 
 // API 配置
-export const DEFAULT_EMBY_SERVER_URL = import.meta.env.VITE_EMBY_SERVER_URL || ''
-export const DANMAKU_API_URL =
-  import.meta.env.VITE_DANMAKU_API_URL || 'https://api.dandanplay.net'
+export const DEFAULT_EMBY_SERVER_URL = runtimeConfig.embyServerUrl
+export const DANMAKU_API_URL = runtimeConfig.danmakuApiUrl
 
 // 缓存时间配置（毫秒）
 export const CACHE_TIME = {

@@ -11,6 +11,7 @@ import type { DanmakuType } from '@/types/danmaku'
 import { useDanmakuStore } from '@/stores/danmakuStore'
 import { createDanmakuClient } from '@/services/api/danmakuClient'
 import { createDanmakuMatcher } from '@/services/danmaku/danmakuMatcher'
+import { DANMAKU_API_URL } from '@/utils/constants'
 
 /**
  * 弹幕 Hook 配置
@@ -33,7 +34,7 @@ export function useDanmaku({ mediaItem, enabled = true }: UseDanmakuOptions) {
 
   // 创建弹幕 API 客户端
   const danmakuClient = createDanmakuClient({
-    baseUrl: import.meta.env.VITE_DANMAKU_API_URL || 'http://localhost:9321',
+    baseUrl: DANMAKU_API_URL,
   })
 
   // 创建弹幕匹配器

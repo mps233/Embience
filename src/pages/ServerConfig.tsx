@@ -14,6 +14,7 @@ import { createEmbyClient } from '@/services/api/embyClient'
 import { detectMediaServer, formatServerUrl } from '@/services/api/mediaServer'
 import { useAuthStore } from '@/stores/authStore'
 import type { SystemInfo } from '@/types/emby'
+import { DEFAULT_EMBY_SERVER_URL } from '@/utils/constants'
 
 /**
  * 验证服务器 URL 格式
@@ -38,7 +39,7 @@ function validateServerUrl(url: string): boolean {
 
 export default function ServerConfig() {
   const navigate = useNavigate()
-  const [serverUrl, setServerUrl] = useState('')
+  const [serverUrl, setServerUrl] = useState(DEFAULT_EMBY_SERVER_URL)
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

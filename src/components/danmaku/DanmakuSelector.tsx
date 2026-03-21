@@ -9,6 +9,7 @@ import { Search, Loader2, ChevronRight, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { createDanmakuClient } from '@/services/api/danmakuClient'
 import type { DanmakuAnimeResult, DanmakuEpisodeResult } from '@/types/danmaku'
+import { DANMAKU_API_URL } from '@/utils/constants'
 
 interface DanmakuSelectorProps {
   /** 是否打开 */
@@ -41,7 +42,7 @@ export default function DanmakuSelector({
 
   // 创建弹幕 API 客户端
   const danmakuClient = createDanmakuClient({
-    baseUrl: import.meta.env.VITE_DANMAKU_API_URL || 'http://localhost:9321',
+    baseUrl: DANMAKU_API_URL,
   })
 
   // 计算弹出位置
