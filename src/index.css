@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes episode-water-wave-drift {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
 @layer utilities {
   /* 隐藏滚动条但保持滚动功能 */
   .scrollbar-hide {
@@ -153,5 +163,31 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
   }
-}
 
+  .episode-water-fill {
+    color: var(--episode-water-color);
+  }
+
+  .episode-water-static {
+    background: var(--episode-water-color);
+  }
+
+  .episode-water-wave-track {
+    position: absolute;
+    inset: 0;
+    left: 0;
+    display: flex;
+    width: 200%;
+    height: 100%;
+    animation: episode-water-wave-drift 2.8s linear infinite;
+    will-change: transform;
+  }
+
+  .episode-water-wave {
+    display: block;
+    flex: 0 0 50%;
+    width: 50%;
+    height: 100%;
+    color: var(--episode-water-color);
+  }
+}

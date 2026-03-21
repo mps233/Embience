@@ -89,12 +89,9 @@ Test Files  1 passed (1)
 Tests       3 passed (3)
 ```
 
-## 演示页面
+## 演示说明
 
-创建了 `src/pages/LayoutDemo.tsx` 演示页面，展示：
-- 布局特性说明
-- 响应式网格示例（12 个卡片）
-- TailwindCSS 断点说明
+布局能力通过业务页面中的实际集成来验证。
 
 ## 无障碍访问
 
@@ -144,11 +141,7 @@ emby-ui/src/
 │       ├── Footer.tsx                      # 页脚
 │       ├── index.ts                        # 导出文件
 │       ├── README.md                       # 使用文档
-│       ├── IMPLEMENTATION.md               # 实现总结（本文件）
-│       └── __tests__/
-│           └── Layout.test.tsx             # 测试文件
-└── pages/
-    └── LayoutDemo.tsx                      # 演示页面
+│       └── IMPLEMENTATION.md               # 实现总结（本文件）
 ```
 
 ## 使用示例
@@ -174,7 +167,6 @@ function MyPage() {
 - ✅ 响应式设计（桌面固定，移动可折叠）
 - ✅ 状态管理和持久化
 - ✅ 流畅的动画效果
-- ✅ 完整的测试覆盖
 - ✅ 详细的文档说明
 - ✅ 无障碍访问支持
 

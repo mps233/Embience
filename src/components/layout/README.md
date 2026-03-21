@@ -110,14 +110,6 @@ function MyComponent() {
 - 焦点指示器清晰可见
 - 遮罩层使用 `aria-hidden="true"` 避免屏幕阅读器读取
 
-## 测试
+## 使用说明
 
-运行布局组件测试：
-
-```bash
-npm test -- src/components/layout/__tests__/Layout.test.tsx
-```
-
-## 演示页面
-
-查看 `src/pages/LayoutDemo.tsx` 了解完整的使用示例。
+布局组件的用法请参考本文件中的代码片段与属性说明。

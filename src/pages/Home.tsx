@@ -60,20 +60,6 @@ export default function Home() {
     !!mediaService && !!userId
   )
 
-  // 如果服务未初始化，显示加载状态
-  if (!mediaService || !userId) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin inline-block w-8 h-8 border-4 border-current border-t-transparent text-primary rounded-full mb-4" />
-            <p className="text-muted-foreground">初始化中...</p>
-          </div>
-        </div>
-      </Layout>
-    )
-  }
-
   /**
    * 导航到媒体库页面
    */
@@ -91,6 +77,20 @@ export default function Home() {
 
   // 轮播图当前索引状态（统一管理）
   const [heroIndex, setHeroIndex] = useState(0)
+
+  // 如果服务未初始化，显示加载状态
+  if (!mediaService || !userId) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin inline-block w-8 h-8 border-4 border-current border-t-transparent text-primary rounded-full mb-4" />
+            <p className="text-muted-foreground">初始化中...</p>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
 
   return (
     <Layout>

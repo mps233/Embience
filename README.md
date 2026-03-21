@@ -1,223 +1,201 @@
-# Emby UI
+# Embience
 
-现代化的 Emby 媒体服务器 Web 用户界面
+基于 React + TypeScript 的 Emby/Jellyfin Web 客户端，当前重点覆盖媒体浏览、搜索、收藏和视频播放（含弹幕）。
 
-## 功能特性
+## 当前功能（与代码一致）
 
-- 🎬 媒体库浏览（电影、电视剧、音乐）
-- 🔍 全局搜索功能
-- ⭐ 收藏管理
-- 📝 播放列表管理
-- 🎥 视频播放（支持 HLS 自适应流）
-- 🎵 音频播放（持久化播放器）
-- 💬 弹幕功能
-- 📱 响应式设计（支持桌面和移动设备）
-- 🌙 暗色/亮色主题切换
-- ♿ 完整的键盘导航和无障碍支持
+- 服务器配置：手动输入地址并自动探测 Emby/Jellyfin 类型
+- 登录认证：用户名 + 密码登录、登出、会话持久化（localStorage）
+- 路由保护：未配置服务器跳转到 `/server-config`，未登录跳转到 `/login`
+- 首页：Hero 轮播 + 按媒体库分类展示“最新内容”
+- 媒体库页：按类型浏览（电影/剧集/音乐）+ 排序（首字母/年份/最新添加）
+- 搜索页：关键词搜索 + 流派匹配搜索 + 类型过滤
+- 收藏页：展示并过滤当前用户收藏
+- 媒体详情页：
+  - 元数据、评分、简介、演职员、媒体流信息
+  - 收藏/取消收藏
+  - 电视剧季集导航
+  - 相似内容推荐
+- 播放页：
+  - 自定义控制栏（播放/暂停、快进快退、音量、全屏、进度拖动）
+  - 音轨/字幕切换
+  - 播放进度上报与续播
+  - 弹幕匹配、弹幕开关、弹幕设置、手动选择弹幕源
+- 视觉与交互：
+  - 响应式布局
+  - 主题色切换（非明暗主题切换）
+
+## 当前路由
+
+- `/server-config`：服务器配置
+- `/login`：登录页
+- `/home`：首页
+- `/library/:type`：媒体库
+- `/media/:id`：媒体详情
+- `/player/:id`：播放页
+- `/search`：搜索页
+- `/favorites`：收藏页
+- `/playlists`：占位页（尚未实现）
+
+## 已知限制
+
+- 自动化测试文件已移除，当前仓库不包含测试命令与测试用例
+- 播放列表页目前是占位内容
+- Header 中“语言切换”按钮为占位逻辑
+- 用户头像当前使用首字母 fallback（未接入真实头像 URL）
+- `MediaGrid` 中虚拟滚动逻辑暂未启用（虽然保留了 `react-window` 代码）
 
 ## 技术栈
 
-- **前端框架**: React 18 + TypeScript
-- **构建工具**: Vite
-- **样式方案**: TailwindCSS + shadcn/ui
-- **状态管理**: Zustand
-- **数据获取**: TanStack Query (React Query v5)
-- **路由**: React Router v6
-- **视频播放**: Video.js + hls.js
-- **音频播放**: Howler.js
+- React 18 + TypeScript
+- Vite 5
+- Tailwind CSS + Radix UI（shadcn 风格组件）
+- Zustand（状态管理）
+- TanStack Query v5（服务端状态）
+- React Router v6（路由）
+- Video.js（播放器）
 
 ## 快速开始
 
 ### 前置要求
 
-- Node.js 18+ 
-- npm 或 yarn
-- 运行中的 Emby 服务器
+- Node.js 18+
+- npm
+- 可访问的 Emby 或 Jellyfin 服务器
 
 ### 安装
 
 ```bash
-# 克隆仓库
-git clone <repository-url>
-cd emby-ui
-
-# 安装依赖
 npm install
 ```
 
-### 配置
+### 环境变量（可选）
 
-复制 `.env.example` 到 `.env.local` 并配置你的 Emby 服务器：
+先复制模板：
 
 ```bash
 cp .env.example .env.local
 ```
 
-编辑 `.env.local`：
+可配置项：
 
 ```env
-# Emby 服务器 URL
-VITE_EMBY_SERVER_URL=http://your-emby-server:8096
+# 开发代理默认目标地址（仅开发环境 Vite 代理使用）
+VITE_EMBY_SERVER_URL=http://localhost:8096
 
-# 弹幕 API URL（可选）
+# 弹幕 API 地址（可选）
 VITE_DANMAKU_API_URL=https://api.dandanplay.net
 
-# 应用配置
+# 应用标识信息（可选）
 VITE_APP_VERSION=1.0.0
 VITE_APP_NAME=Emby UI
 VITE_CLIENT_NAME=Emby Web
 ```
 
-### 开发
+说明：实际服务器地址通常在应用内的 `/server-config` 页面配置与保存。
+
+### 开发与构建
 
 ```bash
-# 启动开发服务器
+# 开发
 npm run dev
 
-# 访问 http://localhost:5173
-```
-
-### 构建
-
-```bash
-# 构建生产版本
+# 构建
 npm run build
 
-# 预览生产构建
+# 预览构建产物
 npm run preview
-```
 
-### 代码检查和格式化
-
-```bash
-# 运行 ESLint
+# 代码检查
 npm run lint
 
-# 格式化代码
+# 代码格式化
 npm run format
 ```
 
 ## 项目结构
 
-```
+```text
 src/
-├── components/          # React 组件
-│   ├── ui/             # shadcn/ui 基础组件
-│   ├── layout/         # 布局组件
-│   ├── media/          # 媒体相关组件
-│   ├── player/         # 播放器组件
-│   ├── danmaku/        # 弹幕组件
-│   └── common/         # 通用组件
-├── pages/              # 页面组件
-├── hooks/              # 自定义 Hooks
-├── stores/             # Zustand 状态管理
-├── services/           # 业务逻辑服务
-│   ├── api/           # API 客户端
-│   ├── player/        # 播放器服务
-│   └── danmaku/       # 弹幕服务
-├── types/              # TypeScript 类型定义
-├── utils/              # 工具函数
-├── App.tsx
-└── main.tsx
+├── components/
+│   ├── common/
+│   ├── danmaku/
+│   ├── layout/
+│   ├── media/
+│   ├── player/
+│   └── ui/
+├── hooks/
+├── pages/
+├── services/
+│   ├── api/
+│   ├── auth/
+│   ├── danmaku/
+│   ├── media/
+│   └── player/
+├── stores/
+├── types/
+└── utils/
 ```
 
-## Emby 服务器配置
+## 部署说明
 
-### CORS 配置
+项目为标准 Vite SPA，构建产物在 `dist/`。部署到任意静态托管平台时，请确保启用 SPA fallback（将未知路由回退到 `index.html`）。
 
-如果你的 Emby 服务器和 Web 应用不在同一域名下，需要配置 CORS：
+## Screenshots
 
-1. 登录 Emby 服务器管理面板
-2. 进入 **设置 > 高级 > 网络**
-3. 在 **CORS 允许的源** 中添加你的 Web 应用域名
+建议将截图放到 `docs/screenshots/` 目录，并按以下文件名命名。
 
-例如：`http://localhost:5173` 或 `https://your-domain.com`
+### 1. 服务器配置页
 
-### API 密钥（可选）
+![服务器配置页](docs/screenshots/01-server-config.png)
 
-你也可以使用 API 密钥进行认证：
+### 2. 登录页
 
-1. 在 Emby 管理面板中创建 API 密钥
-2. 在应用中使用 API 密钥而不是用户密码
+![登录页](docs/screenshots/02-login.png)
 
-## 部署
+### 3. 首页（Hero + 分区）
 
-### 静态托管
+![首页 Hero 与分区](docs/screenshots/03-home-hero.png)
 
-构建后的文件可以部署到任何静态托管服务：
+### 4. 媒体库页（排序）
 
-- Vercel
-- Netlify
-- GitHub Pages
-- Cloudflare Pages
+![媒体库页](docs/screenshots/04-library-sort.png)
 
-### Docker
+### 5. 搜索页（有结果）
 
-```bash
-# 构建 Docker 镜像
-docker build -t emby-ui .
+![搜索结果页](docs/screenshots/05-search-results.png)
 
-# 运行容器
-docker run -p 80:80 emby-ui
-```
+### 6. 搜索页（空状态）
 
-### Nginx
+![搜索空状态](docs/screenshots/06-search-empty.png)
 
-将构建后的 `dist` 目录部署到 Nginx：
+### 7. 收藏页
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    root /path/to/dist;
-    index index.html;
+![收藏页](docs/screenshots/07-favorites.png)
 
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
+### 8. 媒体详情页
 
-## 浏览器支持
+![媒体详情页](docs/screenshots/08-media-detail.png)
 
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-- iOS Safari 14+
-- Chrome Android 90+
+### 9. 播放页（控制栏）
 
-## 开发指南
+![播放页控制栏](docs/screenshots/09-player-controls.png)
 
-### 添加新组件
+### 10. 播放页（弹幕）
 
-使用 shadcn/ui CLI 添加组件：
+![播放页弹幕功能](docs/screenshots/10-player-danmaku.png)
 
-```bash
-npx shadcn-ui@latest add button
-npx shadcn-ui@latest add card
-npx shadcn-ui@latest add dialog
-```
+### 截图规范
 
-### 代码规范
-
-- 使用 TypeScript strict 模式
-- 组件使用函数式组件 + Hooks
-- 代码注释使用中文
-- 变量名、函数名使用英文
-- 遵循 React 最佳实践
-
-## 许可证
-
-MIT
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
+- 桌面端统一使用 `1920x1080`
+- 额外补一张移动端（建议 `390x844`，可选首页或播放器）
+- 使用同一账号与同一媒体库，保证截图风格一致
+- 推荐隐藏浏览器书签栏与无关插件 UI
+- 若包含个人媒体信息，请先打码后再提交
 
 ## 相关链接
 
-- [Emby 官方文档](https://dev.emby.media/)
+- [Emby API 文档](https://dev.emby.media/)
+- [Jellyfin 文档](https://jellyfin.org/docs/)
 - [React 文档](https://react.dev/)
 - [Vite 文档](https://vite.dev/)
-- [TailwindCSS 文档](https://tailwindcss.com/)
-- [shadcn/ui 文档](https://ui.shadcn.com/)

@@ -19,7 +19,6 @@ API 客户端和端点定义
 ### player/
 播放器相关服务
 - `videoService.ts` - Video.js 封装
-- `audioService.ts` - Howler.js 封装
 - `progressTracker.ts` - 播放进度跟踪
 
 ### danmaku/

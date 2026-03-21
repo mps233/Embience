@@ -139,9 +139,9 @@ export default function Player() {
         </div>
         
         {/* 右侧：简介和选集/版本 */}
-        <div className="flex-1 max-w-80 flex-shrink-0 flex flex-col min-h-0">
+        <div className="flex-1 max-w-80 flex-shrink-0 flex h-full flex-col min-h-0">
           <div 
-            className="rounded-xl p-5 flex-1 backdrop-blur-xl border flex flex-col min-h-0" 
+            className="rounded-xl p-5 flex-1 backdrop-blur-xl border flex h-full flex-col min-h-0 overflow-hidden" 
             style={{ 
               backgroundColor: 'rgba(37, 38, 41, 0.95)',
               borderColor: 'rgba(255, 255, 255, 0.12)',
@@ -246,7 +246,7 @@ export default function Player() {
             </div>
             
             {/* 内容区域 - 可滚动 */}
-            <div className="flex-1 overflow-y-auto overflow-x-visible p-2 -m-2 min-h-0">
+            <div className="custom-scrollbar flex-1 overflow-y-auto overflow-x-hidden min-h-0 pr-2">
               {/* 剧集网格 */}
               {mediaItem.type === 'Episode' && episodesResponse?.items && episodesResponse.items.length > 0 ? (
                 <div className="grid grid-cols-6 gap-2">
@@ -256,6 +256,11 @@ export default function Player() {
                     const playProgress = episode.userData?.playbackPositionTicks && episode.runTimeTicks
                       ? (episode.userData.playbackPositionTicks / episode.runTimeTicks) * 100
                       : 0
+                    const waterLevel = Math.max(
+                      0,
+                      Math.min(100, isWatched ? 100 : playProgress)
+                    )
+                    const isCompleted = isWatched || waterLevel >= 99.5
                     
                     return (
                       <button
@@ -275,8 +280,55 @@ export default function Player() {
                             : '0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
                         }}
                       >
+                        {waterLevel > 0 && (
+                          <div
+                            className="pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden transition-[height,opacity] duration-300"
+                            style={{
+                              height: `${waterLevel}%`,
+                              opacity: isCurrentEpisode ? 0.95 : 0.82,
+                            }}
+                          >
+                            <div
+                              className="episode-water-fill absolute inset-0"
+                              style={
+                                {
+                                  ['--episode-water-color' as '--episode-water-color']:
+                                    'color-mix(in srgb, var(--theme-color) 15%, transparent)',
+                                } as React.CSSProperties
+                              }
+                            >
+                              {isCompleted ? (
+                                <div className="episode-water-static absolute inset-0" />
+                              ) : (
+                                <div className="episode-water-wave-track" aria-hidden="true">
+                                  <svg
+                                    className="episode-water-wave"
+                                    viewBox="0 0 240 120"
+                                    preserveAspectRatio="none"
+                                  >
+                                    <path
+                                      d="M0 18 C 30 8, 50 8, 80 18 S 130 28, 160 18 S 210 8, 240 18 V120 H0 Z"
+                                      fill="currentColor"
+                                    />
+                                  </svg>
+                                  <svg
+                                    className="episode-water-wave"
+                                    viewBox="0 0 240 120"
+                                    preserveAspectRatio="none"
+                                  >
+                                    <path
+                                      d="M0 18 C 30 8, 50 8, 80 18 S 130 28, 160 18 S 210 8, 240 18 V120 H0 Z"
+                                      fill="currentColor"
+                                    />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {/* 集数 */}
-                        <div className="flex h-full items-center justify-center">
+                        <div className="relative z-10 flex h-full items-center justify-center">
                           <span 
                             className={`text-xs font-semibold transition-transform duration-200 ${!isCurrentEpisode && 'group-hover:scale-110'}`} 
                             style={{ 
@@ -290,21 +342,6 @@ export default function Player() {
                         {/* 悬停效果 */}
                         {!isCurrentEpisode && (
                           <div className="absolute inset-0 bg-white/0 group-hover:bg-white/[0.06] transition-colors duration-200" />
-                        )}
-                        
-                        {/* 播放进度条 - 底部绿色进度 */}
-                        {playProgress > 0 && playProgress < 95 && !isCurrentEpisode && (
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
-                            <div 
-                              className="h-full bg-green-500 shadow-sm"
-                              style={{ width: `${playProgress}%` }}
-                            />
-                          </div>
-                        )}
-                        
-                        {/* 已看标记 */}
-                        {isWatched && !isCurrentEpisode && (
-                          <div className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-green-500 shadow-lg" />
                         )}
                       </button>
                     )
