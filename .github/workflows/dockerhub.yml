@@ -29,7 +29,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/emby-ui
+          images: ${{ secrets.DOCKER_USERNAME }}/embience
           tags: |
             type=ref,event=branch
             type=ref,event=tag
