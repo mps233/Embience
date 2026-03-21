@@ -54,6 +54,15 @@ export default function Player() {
     },
     !!mediaItem?.seasonId && !!user?.id
   )
+
+  const episodeList = episodesResponse?.items || []
+  const currentEpisodeIndex = mediaItem?.type === 'Episode'
+    ? episodeList.findIndex((episode) => episode.id === mediaItem.id)
+    : -1
+  const previousEpisode = currentEpisodeIndex > 0 ? episodeList[currentEpisodeIndex - 1] : null
+  const nextEpisode = currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeList.length - 1
+    ? episodeList[currentEpisodeIndex + 1]
+    : null
   
   // 如果是剧集，获取电视剧信息（用于显示流派等元数据）
   const { data: seriesItem } = useMediaDetail(
@@ -135,6 +144,10 @@ export default function Player() {
             onPlaybackStart={() => {}}
             onPlaybackProgress={() => {}}
             onPlaybackEnd={() => {}}
+            onPlayPreviousEpisode={previousEpisode ? () => navigate(`/player/${previousEpisode.id}`) : undefined}
+            onPlayNextEpisode={nextEpisode ? () => navigate(`/player/${nextEpisode.id}`) : undefined}
+            canPlayPreviousEpisode={!!previousEpisode}
+            canPlayNextEpisode={!!nextEpisode}
           />
         </div>
         

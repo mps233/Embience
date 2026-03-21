@@ -25,6 +25,8 @@ import {
   VolumeX, 
   Maximize, 
   Minimize,
+  RotateCcw,
+  RotateCw,
   SkipBack,
   SkipForward,
   Settings,
@@ -79,6 +81,14 @@ interface VideoPlayerProps {
   }) => void
   /** 播放结束回调 */
   onPlaybackEnd?: () => void
+  /** 上一集回调 */
+  onPlayPreviousEpisode?: () => void
+  /** 下一集回调 */
+  onPlayNextEpisode?: () => void
+  /** 是否可切换到上一集 */
+  canPlayPreviousEpisode?: boolean
+  /** 是否可切换到下一集 */
+  canPlayNextEpisode?: boolean
 }
 // 字幕检测相关类型
 interface DetectedSubtitle {
@@ -171,6 +181,10 @@ export function VideoPlayer({
   onPlaybackStart,
   onPlaybackProgress,
   onPlaybackEnd,
+  onPlayPreviousEpisode,
+  onPlayNextEpisode,
+  canPlayPreviousEpisode = false,
+  canPlayNextEpisode = false,
 }: VideoPlayerProps) {
   // 认证状态
   const { user, serverUrl, serverType, accessToken } = useAuthStore()
@@ -1279,7 +1293,7 @@ export function VideoPlayer({
         }}
       >
           {/* 进度条容器 - 全宽无内边距 */}
-          <div className="py-2 px-6">
+          <div className="pt-3 pb-1 px-6">
             <div className="relative group">
               {/* 进度条背景 */}
               <div className="h-1.5 bg-white/[0.12] rounded-full overflow-visible relative">
@@ -1288,8 +1302,8 @@ export function VideoPlayer({
                   className="h-full rounded-full transition-all duration-200 relative overflow-visible pointer-events-none"
                   style={{
                     width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
-                    background: 'linear-gradient(90deg, rgba(248, 200, 220, 0.95) 0%, rgba(255, 244, 170, 0.95) 33%, rgba(216, 249, 208, 0.95) 66%, rgba(202, 215, 255, 0.95) 100%)',
-                    boxShadow: '0 0 20px rgba(248, 200, 220, 0.5), 0 0 8px rgba(255, 244, 170, 0.3)',
+                    background: 'color-mix(in srgb, var(--theme-color) 72%, black)',
+                    boxShadow: '0 0 16px color-mix(in srgb, var(--theme-color) 28%, transparent)',
                   }}
                 />
               </div>
@@ -1343,6 +1357,17 @@ export function VideoPlayer({
             <div className="flex items-center justify-between gap-4 w-full">
               {/* 左侧控制按钮 */}
               <div className="flex items-center gap-3">
+                {/* 上一集按钮 */}
+                <button
+                  onClick={onPlayPreviousEpisode}
+                  disabled={!canPlayPreviousEpisode}
+                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  title="上一集"
+                  aria-label="上一集"
+                >
+                  <SkipBack className="w-5 h-5 text-white/85" />
+                </button>
+
                 {/* 播放/暂停按钮 */}
                 <button
                   onClick={handlePlayButtonClick}
@@ -1355,13 +1380,24 @@ export function VideoPlayer({
                   )}
                 </button>
 
+                {/* 下一集按钮 */}
+                <button
+                  onClick={onPlayNextEpisode}
+                  disabled={!canPlayNextEpisode}
+                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  title="下一集"
+                  aria-label="下一集"
+                >
+                  <SkipForward className="w-5 h-5 text-white/85" />
+                </button>
+
                 {/* 快退按钮 */}
                 <button
                   onClick={handleSkipBackward}
                   className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
                   title="后退 10 秒"
                 >
-                  <SkipBack className="w-5 h-5 text-white/85" />
+                  <RotateCcw className="w-5 h-5 text-white/85" />
                 </button>
 
                 {/* 快进按钮 */}
@@ -1370,7 +1406,7 @@ export function VideoPlayer({
                   className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
                   title="前进 10 秒"
                 >
-                  <SkipForward className="w-5 h-5 text-white/85" />
+                  <RotateCw className="w-5 h-5 text-white/85" />
                 </button>
 
                 {/* 音量控制 */}
@@ -1387,14 +1423,14 @@ export function VideoPlayer({
                   </button>
 
                   {/* 音量滑块 */}
-                  <div className="relative w-0 group-hover:w-24 transition-all duration-300 overflow-hidden">
+                  <div className="flex items-center h-9 w-0 group-hover:w-24 transition-all duration-300 overflow-hidden">
                     <input
                       type="range"
                       min="0"
                       max="100"
                       value={volume}
                       onChange={handleVolumeChange}
-                      className="w-full h-1 bg-white/[0.15] rounded-full appearance-none cursor-pointer
+                      className="w-full h-1 bg-white/[0.15] rounded-full appearance-none cursor-pointer align-middle
                         [&::-webkit-slider-thumb]:appearance-none
                         [&::-webkit-slider-thumb]:w-3
                         [&::-webkit-slider-thumb]:h-3
@@ -1406,8 +1442,8 @@ export function VideoPlayer({
                         [&::-webkit-slider-thumb]:hover:scale-110"
                       style={{
                         background: `linear-gradient(to right, 
-                          rgba(248, 200, 220, 0.9) 0%, 
-                          rgba(255, 244, 170, 0.9) ${volume}%, 
+                          color-mix(in srgb, var(--theme-color) 72%, black) 0%, 
+                          color-mix(in srgb, var(--theme-color) 72%, black) ${volume}%, 
                           rgba(255, 255, 255, 0.15) ${volume}%, 
                           rgba(255, 255, 255, 0.15) 100%)`
                       }}
