@@ -267,6 +267,11 @@ export interface MediaSource {
   mediaStreams: MediaStream[]
   defaultAudioStreamIndex?: number
   defaultSubtitleStreamIndex?: number
+  streamUrl?: string
+  directStreamUrl?: string
+  transcodingUrl?: string
+  liveStreamId?: string
+  requiredHttpHeaders?: Record<string, string>
 }
 
 /**

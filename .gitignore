@@ -28,3 +28,6 @@ dist-ssr
 
 # Agent memory doc
 AGENTS.md
+
+# Local reverse-engineering / study artifacts
+study/

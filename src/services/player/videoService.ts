@@ -9,12 +9,30 @@ import 'video.js/dist/video-js.css'
 import type Player from 'video.js/dist/types/player'
 import type { MediaItem, MediaSource } from '@/types/emby'
 import type { PlaybackOptions, AudioTrack, SubtitleTrack, PlayMethod } from '@/types/player'
+import { createEmbyClient } from '@/services/api/embyClient'
 import {
   getApiBaseUrl,
+  getCompatibleTokenQueryParams,
   getTokenHeaderName,
-  getTokenQueryParamName,
   type MediaServerType,
 } from '@/services/api/mediaServer'
+import { STORAGE_KEYS } from '@/utils/constants'
+import { getStorageItem } from '@/utils/storage'
+
+type PlaybackInfoResponse = {
+  MediaSources?: Array<Record<string, any>>
+  PlaySessionId?: string
+}
+
+type AudioCompatibilityResult = {
+  requiresServerHandling: boolean
+  reason?: 'unsupportedCodec' | 'multichannel'
+  codec: string
+  channels: number
+  channelLayout: string
+  audioStreamIndex?: number
+  maxAudioChannels: number
+}
 
 /**
  * 视频服务类
@@ -23,6 +41,9 @@ export class VideoService {
   private player: Player | null = null
   private currentPlayMethod: PlayMethod | null = null
   private lastError: Error | null = null
+  private currentMediaSource: MediaSource | null = null
+  private currentAudioStreamIndex: number | undefined
+  private currentSubtitleStreamIndex: number | undefined
   private serverUrl: string
   private accessToken: string
   private serverType: MediaServerType
@@ -31,6 +52,24 @@ export class VideoService {
     this.serverUrl = serverUrl
     this.accessToken = accessToken
     this.serverType = serverType
+  }
+
+  private logInfo(scope: string, message: string, details?: unknown): void {
+    if (details !== undefined) {
+      console.log(`[${scope}] ${message}`, details)
+      return
+    }
+
+    console.log(`[${scope}] ${message}`)
+  }
+
+  private logWarn(scope: string, message: string, details?: unknown): void {
+    if (details !== undefined) {
+      console.warn(`[${scope}] ${message}`, details)
+      return
+    }
+
+    console.warn(`[${scope}] ${message}`)
   }
 
   /**
@@ -69,31 +108,49 @@ export class VideoService {
       throw new Error('没有可用的媒体源')
     }
 
+    const resolvedOptions = this.resolvePlaybackOptions(mediaSource, options)
+    this.logAudioCompatibilityDecision(mediaSource, resolvedOptions)
+
     // 生成播放会话 ID
-    const playSessionId = this.generatePlaySessionId()
+    const requestedPlaySessionId = this.generatePlaySessionId()
+
+    // 参考 Emby 官方前端，先做 PlaybackInfo 协商
+    const negotiatedPlayback = await this.getPlaybackInfo(
+      mediaItem.id,
+      mediaSource,
+      resolvedOptions,
+      requestedPlaySessionId
+    )
+    const effectiveMediaSource = negotiatedPlayback?.mediaSource || mediaSource
+    const effectivePlaySessionId = negotiatedPlayback?.playSessionId || requestedPlaySessionId
+    const effectiveOptions = this.resolvePlaybackOptions(effectiveMediaSource, resolvedOptions)
+
+    this.currentMediaSource = effectiveMediaSource
+    this.currentAudioStreamIndex = effectiveOptions.audioStreamIndex
+    this.currentSubtitleStreamIndex = effectiveOptions.subtitleStreamIndex
 
     // 选择播放方法并尝试初始化
     const playMethod = await this.selectAndInitializePlayMethod(
       videoElement,
       mediaItem.id,
-      mediaSource,
-      options,
-      playSessionId
+      effectiveMediaSource,
+      effectiveOptions,
+      effectivePlaySessionId
     )
 
     // 构建流 URL
     const streamUrl = this.buildStreamUrl(
       mediaItem.id,
-      mediaSource,
-      options,
-      playSessionId,
+      effectiveMediaSource,
+      effectiveOptions,
+      effectivePlaySessionId,
       playMethod
     )
 
     return {
       streamUrl,
-      playSessionId,
-      mediaSourceId: mediaSource.id,
+      playSessionId: effectivePlaySessionId,
+      mediaSourceId: effectiveMediaSource.id,
       playMethod,
     }
   }
@@ -106,8 +163,6 @@ export class VideoService {
       const baseUrl = this.getBaseUrl()
       const testUrl = `${baseUrl}/System/Info`
       
-      console.log('测试服务器连接:', testUrl)
-      
       const response = await fetch(testUrl, {
         method: 'GET',
         headers: {
@@ -119,8 +174,6 @@ export class VideoService {
       if (!response.ok) {
         throw new Error(`服务器响应错误: ${response.status} ${response.statusText}`)
       }
-      
-      console.log('服务器连接测试成功')
     } catch (error) {
       console.error('服务器连接测试失败:', error)
       throw new Error(`无法连接到媒体服务器: ${error instanceof Error ? error.message : '未知错误'}`)
@@ -145,18 +198,18 @@ export class VideoService {
     playSessionId: string
   ): Promise<PlayMethod> {
     // 确定可用的播放方法（按优先级排序）
-    const availableMethods = this.getAvailablePlayMethods(mediaSource)
+    const availableMethods = this.getAvailablePlayMethodsWithOptions(mediaSource, options)
 
     if (availableMethods.length === 0) {
       throw new Error('没有可用的播放方法')
     }
 
-    console.log(`尝试播放方法: ${availableMethods.join(', ')}`)
+    this.logInfo('播放协商', `尝试播放方法: ${availableMethods.join(', ')}`)
 
     // 尝试每个播放方法，直到成功
     for (const method of availableMethods) {
       try {
-        console.log(`正在尝试播放方法: ${method}`)
+        this.logInfo('播放协商', `正在尝试播放方法: ${method}`)
         
         // 构建流 URL
         const streamUrl = this.buildStreamUrl(
@@ -172,16 +225,16 @@ export class VideoService {
 
         // 成功，记录播放方法
         this.currentPlayMethod = method
-        console.log(`✅ 播放方法 ${method} 初始化成功`)
+        this.logInfo('播放协商', `播放方法 ${method} 初始化成功`)
         
         return method
       } catch (error) {
         this.lastError = error as Error
-        console.warn(`❌ 播放方法 ${method} 失败:`, error)
+        this.logWarn('播放协商', `播放方法 ${method} 失败`, error)
 
         // 如果不是最后一个方法，继续尝试下一个
         if (method !== availableMethods[availableMethods.length - 1]) {
-          console.log(`尝试下一个播放方法...`)
+          this.logInfo('播放协商', '尝试下一个播放方法')
           continue
         }
 
@@ -201,15 +254,37 @@ export class VideoService {
    * @param mediaSource - 媒体源
    * @returns 播放方法数组
    */
-  private getAvailablePlayMethods(mediaSource: MediaSource): PlayMethod[] {
+  private getAvailablePlayMethodsWithOptions(
+    mediaSource: MediaSource,
+    options: PlaybackOptions
+  ): PlayMethod[] {
     const methods: PlayMethod[] = []
+    const shouldForceAudioCompatiblePlayback = this.shouldForceAudioCompatiblePlayback(mediaSource, options)
+
+    if (shouldForceAudioCompatiblePlayback) {
+      if (mediaSource.supportsDirectStream) {
+        methods.push('DirectStream')
+      }
+      if (mediaSource.supportsTranscoding) {
+        methods.push('Transcode')
+      }
+
+      if (methods.length > 0) {
+        this.logInfo('播放协商', '当前音轨需要服务端处理，优先避免 DirectPlay', {
+          audioStreamIndex: options.audioStreamIndex,
+          reason: this.analyzeAudioCompatibility(mediaSource, options).reason,
+          methods,
+        })
+        return methods
+      }
+    }
 
     // 对于 STRM 文件，优先使用 DirectStream 而不是 DirectPlay
     // 因为 DirectPlay 可能会导致服务器错误
     const isStrmFile = mediaSource.path?.toLowerCase().endsWith('.strm')
     
     if (isStrmFile) {
-      console.log('检测到 STRM 文件，调整播放方法优先级')
+      this.logInfo('播放协商', '检测到 STRM 文件，调整播放方法优先级')
       
       // 优先级 1: DirectStream（对 STRM 文件更稳定）
       if (mediaSource.supportsDirectStream) {
@@ -244,8 +319,562 @@ export class VideoService {
       }
     }
 
-    console.log('可用播放方法:', methods)
+    this.logInfo('播放协商', '可用播放方法', methods)
     return methods
+  }
+
+  private resolvePlaybackOptions(mediaSource: MediaSource, options: PlaybackOptions): PlaybackOptions {
+    const resolvedAudioStreamIndex =
+      options.audioStreamIndex ??
+      mediaSource.defaultAudioStreamIndex ??
+      mediaSource.mediaStreams?.find((stream) => stream.type === 'Audio')?.index
+
+    const resolvedSubtitleStreamIndex =
+      options.subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex
+
+    return {
+      ...options,
+      audioStreamIndex: resolvedAudioStreamIndex,
+      subtitleStreamIndex: resolvedSubtitleStreamIndex,
+    }
+  }
+
+  private getSelectedAudioStream(mediaSource: MediaSource, options: PlaybackOptions) {
+    const audioStreams = mediaSource.mediaStreams?.filter((stream) => stream.type === 'Audio') || []
+
+    if (audioStreams.length === 0) {
+      return undefined
+    }
+
+    if (options.audioStreamIndex !== undefined) {
+      return (
+        audioStreams.find((stream) => stream.index === options.audioStreamIndex) ||
+        audioStreams[0]
+      )
+    }
+
+    return (
+      audioStreams.find((stream) => stream.index === mediaSource.defaultAudioStreamIndex) ||
+      audioStreams[0]
+    )
+  }
+
+  private normalizeAudioCodec(codec?: string): string {
+    return codec?.trim().toLowerCase() || ''
+  }
+
+  private shouldForceAudioCompatiblePlayback(
+    mediaSource: MediaSource,
+    options: PlaybackOptions
+  ): boolean {
+    return this.analyzeAudioCompatibility(mediaSource, options).requiresServerHandling
+  }
+
+  private analyzeAudioCompatibility(
+    mediaSource: MediaSource,
+    options: PlaybackOptions
+  ): AudioCompatibilityResult {
+    const audioStream = this.getSelectedAudioStream(mediaSource, options)
+    const maxAudioChannels = options.maxAudioChannels ?? 2
+
+    if (!audioStream) {
+      return {
+        requiresServerHandling: false,
+        codec: '',
+        channels: 0,
+        channelLayout: '',
+        audioStreamIndex: options.audioStreamIndex,
+        maxAudioChannels,
+      }
+    }
+
+    const codec = this.normalizeAudioCodec(audioStream.codec)
+    const channels = audioStream.channels ?? 0
+    const channelLayout = (audioStream.channelLayout || audioStream.displayTitle || '').toLowerCase()
+    const unsupportedCodecs = new Set([
+      'dts',
+      'dca',
+      'dtshd_ma',
+      'dtshd_hra',
+      'truehd',
+      'mlp',
+      'pcm',
+      'pcm_s16le',
+      'pcm_s24le',
+      'flac',
+      'alac',
+      'ape',
+      'vorbis',
+      'wma',
+      'wmav2',
+      'ra',
+      'cook',
+    ])
+    const likelyMultiChannel =
+      channels > maxAudioChannels ||
+      channelLayout.includes('5.1') ||
+      channelLayout.includes('7.1') ||
+      channelLayout.includes('atmos')
+
+    if (unsupportedCodecs.has(codec)) {
+      return {
+        requiresServerHandling: true,
+        reason: 'unsupportedCodec',
+        codec,
+        channels,
+        channelLayout,
+        audioStreamIndex: audioStream.index,
+        maxAudioChannels,
+      }
+    }
+
+    if (likelyMultiChannel) {
+      return {
+        requiresServerHandling: true,
+        reason: 'multichannel',
+        codec,
+        channels,
+        channelLayout: audioStream.channelLayout || audioStream.displayTitle || '',
+        audioStreamIndex: audioStream.index,
+        maxAudioChannels,
+      }
+    }
+
+    return {
+      requiresServerHandling: false,
+      codec,
+      channels,
+      channelLayout,
+      audioStreamIndex: audioStream.index,
+      maxAudioChannels,
+    }
+  }
+
+  private logAudioCompatibilityDecision(
+    mediaSource: MediaSource,
+    options: PlaybackOptions
+  ): void {
+    const analysis = this.analyzeAudioCompatibility(mediaSource, options)
+
+    if (!analysis.requiresServerHandling) {
+      return
+    }
+
+    if (analysis.reason === 'unsupportedCodec') {
+      this.logInfo('音轨协商', '检测到浏览器不支持的音轨编码，优先使用兼容转码', analysis)
+      return
+    }
+
+    this.logInfo('音轨协商', '检测到多声道音轨，优先使用音频兼容转码路径', analysis)
+  }
+
+  private getCurrentUserId(): string | undefined {
+    const userInfo = getStorageItem<{ id?: string }>(STORAGE_KEYS.USER_INFO)
+    return userInfo?.id
+  }
+
+  private canPlayAudioType(type: string): boolean {
+    try {
+      const audio = document.createElement('audio')
+      return !!audio.canPlayType(type).replace(/no/i, '')
+    } catch {
+      return false
+    }
+  }
+
+  private canPlayAudioFormat(format: string): boolean {
+    switch (format) {
+      case 'aac':
+        return this.canPlayAudioType('audio/aac') || this.canPlayAudioType('audio/mp4; codecs="mp4a.40.2"')
+      case 'mp3':
+        return this.canPlayAudioType('audio/mpeg')
+      case 'ac3':
+        return this.canPlayAudioType('audio/mp4; codecs="ac-3"')
+      case 'eac3':
+        return this.canPlayAudioType('audio/mp4; codecs="ec-3"')
+      case 'opus':
+        return this.canPlayAudioType('audio/ogg; codecs="opus"')
+      case 'flac':
+        return this.canPlayAudioType('audio/flac') || this.canPlayAudioType('audio/mp4; codecs="flac"')
+      case 'vorbis':
+        return this.canPlayAudioType('audio/ogg; codecs="vorbis"')
+      case 'wav':
+        return this.canPlayAudioType('audio/wav')
+      default:
+        return false
+    }
+  }
+
+  private getSupportedVideoAudioCodecs(): string[] {
+    const codecs: string[] = []
+
+    if (this.canPlayAudioFormat('aac')) codecs.push('aac')
+    if (this.canPlayAudioFormat('mp3')) codecs.push('mp3')
+    if (this.canPlayAudioFormat('ac3')) codecs.push('ac3')
+    if (this.canPlayAudioFormat('eac3')) codecs.push('eac3')
+    if (this.canPlayAudioFormat('opus')) codecs.push('opus')
+    if (this.canPlayAudioFormat('flac')) codecs.push('flac')
+    if (this.canPlayAudioFormat('vorbis')) codecs.push('vorbis')
+
+    return codecs.length > 0 ? codecs : ['aac', 'mp3']
+  }
+
+  private buildBrowserDeviceProfile(options: PlaybackOptions): Record<string, unknown> {
+    return this.serverType === 'jellyfin'
+      ? this.buildJellyfinDeviceProfile(options)
+      : this.buildEmbyDeviceProfile(options)
+  }
+
+  private buildEmbyDeviceProfile(options: PlaybackOptions): Record<string, unknown> {
+    const supportedVideoAudioCodecs = this.getSupportedVideoAudioCodecs()
+    const maxAudioChannels = options.maxAudioChannels ?? 2
+    const maxStreamingBitrate = options.maxStreamingBitrate ?? 140000000
+    const hlsVideoAudioCodecs = supportedVideoAudioCodecs.filter((codec) =>
+      ['aac', 'mp3', 'ac3', 'eac3', 'opus'].includes(codec)
+    )
+    const streamingVideoAudioCodecs = hlsVideoAudioCodecs.length > 0 ? hlsVideoAudioCodecs : ['aac', 'mp3']
+
+    return {
+      Name: 'embience-web',
+      MaxStreamingBitrate: maxStreamingBitrate,
+      MaxStaticBitrate: maxStreamingBitrate,
+      MusicStreamingTranscodingBitrate: 192000,
+      DirectPlayProfiles: [
+        {
+          Container: 'mp4,m4v',
+          Type: 'Video',
+          VideoCodec: 'h264,hevc,av1',
+          AudioCodec: supportedVideoAudioCodecs.join(','),
+        },
+        {
+          Container: 'mkv',
+          Type: 'Video',
+          VideoCodec: 'h264,hevc,av1,vp9',
+          AudioCodec: supportedVideoAudioCodecs.join(','),
+        },
+        {
+          Container: 'mp3,aac,m4a,flac,opus,ogg,oga,wav,webma',
+          Type: 'Audio',
+        },
+      ],
+      TranscodingProfiles: [
+        {
+          Container: 'aac',
+          Type: 'Audio',
+          Context: 'Streaming',
+          Protocol: 'hls',
+          AudioCodec: 'aac',
+          MaxAudioChannels: maxAudioChannels.toString(),
+          MinSegments: '1',
+          BreakOnNonKeyFrames: true,
+        },
+        {
+          Container: 'aac',
+          Type: 'Audio',
+          Context: 'Streaming',
+          Protocol: 'http',
+          AudioCodec: 'aac',
+          MaxAudioChannels: maxAudioChannels.toString(),
+        },
+        {
+          Container: 'mp3',
+          Type: 'Audio',
+          Context: 'Streaming',
+          Protocol: 'http',
+          AudioCodec: 'mp3',
+          MaxAudioChannels: maxAudioChannels.toString(),
+        },
+        {
+          Container: 'ts',
+          Type: 'Video',
+          Context: 'Streaming',
+          Protocol: 'hls',
+          AudioCodec: streamingVideoAudioCodecs.join(','),
+          VideoCodec: 'h264',
+          MaxAudioChannels: maxAudioChannels.toString(),
+          MinSegments: '1',
+          BreakOnNonKeyFrames: true,
+          ManifestSubtitles: 'vtt',
+        },
+        {
+          Container: 'mp4',
+          Type: 'Video',
+          Context: 'Static',
+          Protocol: 'http',
+          AudioCodec: supportedVideoAudioCodecs.join(','),
+          VideoCodec: 'h264',
+        },
+      ],
+      SubtitleProfiles: [
+        {
+          Format: 'vtt',
+          Method: 'Hls',
+        },
+        {
+          Format: 'vtt',
+          Method: 'External',
+          AllowChunkedResponse: true,
+        },
+        {
+          Format: 'srt',
+          Method: 'External',
+        },
+        {
+          Format: 'ass',
+          Method: 'External',
+        },
+        {
+          Format: 'ssa',
+          Method: 'External',
+        },
+      ],
+      ResponseProfiles: [
+        {
+          Type: 'Video',
+          Container: 'm4v',
+          MimeType: 'video/mp4',
+        },
+      ],
+      CodecProfiles: [
+        {
+          Type: 'VideoAudio',
+          Codec: 'aac',
+          Conditions: [
+            {
+              Condition: 'Equals',
+              Property: 'IsSecondaryAudio',
+              Value: 'false',
+              IsRequired: false,
+            },
+            {
+              Condition: 'LessThanEqual',
+              Property: 'AudioChannels',
+              Value: maxAudioChannels.toString(),
+              IsRequired: true,
+            },
+          ],
+        },
+      ],
+    }
+  }
+
+  private buildJellyfinDeviceProfile(options: PlaybackOptions): Record<string, unknown> {
+    const supportedVideoAudioCodecs = this.getSupportedVideoAudioCodecs()
+    const maxAudioChannels = options.maxAudioChannels ?? 2
+    const maxStreamingBitrate = options.maxStreamingBitrate ?? 140000000
+
+    return {
+      Name: 'embience-web',
+      MaxStreamingBitrate: maxStreamingBitrate,
+      MaxStaticBitrate: maxStreamingBitrate,
+      MusicStreamingTranscodingBitrate: 192000,
+      DirectPlayProfiles: [
+        {
+          Container: 'mp4,m4v',
+          Type: 'Video',
+          VideoCodec: 'h264,hevc,av1',
+          AudioCodec: supportedVideoAudioCodecs.join(','),
+        },
+        {
+          Container: 'mkv',
+          Type: 'Video',
+          VideoCodec: 'h264,hevc,av1,vp9',
+          AudioCodec: supportedVideoAudioCodecs.join(','),
+        },
+        {
+          Container: 'mp3,aac,m4a,flac,opus,ogg,oga,wav,webma',
+          Type: 'Audio',
+        },
+      ],
+      TranscodingProfiles: [
+        {
+          Container: 'ts',
+          Type: 'Video',
+          Context: 'Streaming',
+          Protocol: 'hls',
+          AudioCodec: 'aac,mp3',
+          VideoCodec: 'h264',
+          MaxAudioChannels: maxAudioChannels.toString(),
+          MinSegments: '1',
+          BreakOnNonKeyFrames: true,
+        },
+        {
+          Container: 'mp4',
+          Type: 'Video',
+          Context: 'Streaming',
+          Protocol: 'http',
+          AudioCodec: 'aac',
+          VideoCodec: 'h264',
+          MaxAudioChannels: maxAudioChannels.toString(),
+        },
+        {
+          Container: 'aac',
+          Type: 'Audio',
+          Context: 'Streaming',
+          Protocol: 'http',
+          AudioCodec: 'aac',
+          MaxAudioChannels: maxAudioChannels.toString(),
+        },
+      ],
+      SubtitleProfiles: [
+        {
+          Format: 'vtt',
+          Method: 'External',
+        },
+        {
+          Format: 'srt',
+          Method: 'External',
+        },
+        {
+          Format: 'ass',
+          Method: 'External',
+        },
+        {
+          Format: 'ssa',
+          Method: 'External',
+        },
+      ],
+      ResponseProfiles: [
+        {
+          Type: 'Video',
+          Container: 'm4v',
+          MimeType: 'video/mp4',
+        },
+      ],
+    }
+  }
+
+  private transformPlaybackInfoMediaSource(source: Record<string, any>): MediaSource {
+    const requiredHttpHeaders = source.RequiredHttpHeaders
+    const normalizedRequiredHttpHeaders =
+      requiredHttpHeaders && typeof requiredHttpHeaders === 'object'
+        ? Object.fromEntries(
+            Object.entries(requiredHttpHeaders).map(([key, value]) => [key, String(value)])
+          )
+        : undefined
+
+    return {
+      id: source.Id,
+      path: source.Path || '',
+      protocol: source.Protocol || 'Http',
+      container: source.Container || '',
+      size: source.Size || 0,
+      bitrate: source.Bitrate || 0,
+      runTimeTicks: source.RunTimeTicks || 0,
+      supportsDirectPlay: !!source.SupportsDirectPlay,
+      supportsDirectStream: !!source.SupportsDirectStream,
+      supportsTranscoding: !!source.SupportsTranscoding,
+      defaultAudioStreamIndex: source.DefaultAudioStreamIndex,
+      defaultSubtitleStreamIndex: source.DefaultSubtitleStreamIndex,
+      streamUrl: source.StreamUrl,
+      directStreamUrl: source.DirectStreamUrl,
+      transcodingUrl: source.TranscodingUrl,
+      liveStreamId: source.LiveStreamId,
+      requiredHttpHeaders: normalizedRequiredHttpHeaders,
+      mediaStreams: (source.MediaStreams || []).map((stream: Record<string, any>) => ({
+        codec: stream.Codec || '',
+        language: stream.Language,
+        displayTitle: stream.DisplayTitle || '',
+        index: stream.Index,
+        type: stream.Type,
+        width: stream.Width,
+        height: stream.Height,
+        aspectRatio: stream.AspectRatio,
+        averageFrameRate: stream.AverageFrameRate,
+        bitRate: stream.BitRate,
+        channels: stream.Channels,
+        channelLayout: stream.ChannelLayout,
+        sampleRate: stream.SampleRate,
+        isExternal: stream.IsExternal,
+        isTextSubtitleStream: stream.IsTextSubtitleStream,
+        supportsExternalStream: stream.SupportsExternalStream,
+        deliveryUrl: stream.DeliveryUrl,
+      })),
+    }
+  }
+
+  private async getPlaybackInfo(
+    itemId: string,
+    mediaSource: MediaSource,
+    options: PlaybackOptions,
+    playSessionId: string
+  ): Promise<{ mediaSource: MediaSource; playSessionId: string } | null> {
+    const userId = this.getCurrentUserId()
+
+    if (!userId) {
+      return null
+    }
+
+    const shouldForceAudioCompatiblePlayback = this.shouldForceAudioCompatiblePlayback(
+      mediaSource,
+      options
+    )
+    const requestBody: Record<string, unknown> = {
+      UserId: userId,
+      StartTimeTicks: options.startPositionTicks || 0,
+      IsPlayback: true,
+      AutoOpenLiveStream: true,
+      MediaSourceId: mediaSource.id,
+      DeviceProfile: this.buildBrowserDeviceProfile(options),
+      CurrentPlaySessionId: playSessionId,
+    }
+
+    if (options.audioStreamIndex !== undefined) {
+      requestBody.AudioStreamIndex = options.audioStreamIndex
+    }
+
+    if (options.subtitleStreamIndex !== undefined) {
+      requestBody.SubtitleStreamIndex = options.subtitleStreamIndex
+    }
+
+    if (options.maxStreamingBitrate) {
+      requestBody.MaxStreamingBitrate = options.maxStreamingBitrate
+    }
+
+    if (shouldForceAudioCompatiblePlayback) {
+      requestBody.EnableDirectPlay = false
+      requestBody.EnableDirectStream = true
+      requestBody.AllowVideoStreamCopy = true
+      requestBody.AllowAudioStreamCopy = false
+    }
+
+    try {
+      const apiClient = createEmbyClient({
+        serverUrl: this.serverUrl,
+        accessToken: this.accessToken,
+        serverType: this.serverType,
+      })
+      const response = await apiClient.post<PlaybackInfoResponse>(
+        `/Items/${itemId}/PlaybackInfo`,
+        requestBody,
+        { noRetry: true }
+      )
+      const negotiatedSource = response.MediaSources?.[0]
+
+      if (!negotiatedSource) {
+        return null
+      }
+
+      const transformedSource = this.transformPlaybackInfoMediaSource(negotiatedSource)
+      this.logInfo('PlaybackInfo', '协商成功', {
+        playSessionId: response.PlaySessionId,
+        supportsDirectPlay: transformedSource.supportsDirectPlay,
+        supportsDirectStream: transformedSource.supportsDirectStream,
+        supportsTranscoding: transformedSource.supportsTranscoding,
+        defaultAudioStreamIndex: transformedSource.defaultAudioStreamIndex,
+        streamUrl: transformedSource.streamUrl,
+        directStreamUrl: transformedSource.directStreamUrl,
+        transcodingUrl: transformedSource.transcodingUrl,
+      })
+
+      return {
+        mediaSource: transformedSource,
+        playSessionId: response.PlaySessionId || playSessionId,
+      }
+    } catch (error) {
+      this.logWarn('PlaybackInfo', '协商失败，回退到本地播放策略', error)
+      return null
+    }
   }
 
   /**
@@ -280,75 +909,96 @@ export class VideoService {
     options: PlaybackOptions,
     _playMethod: PlayMethod
   ): Promise<void> {
-    // 调试信息
-    console.log('初始化播放器:', {
-      streamUrl,
-      playMethod: _playMethod,
-      options
-    })
-
-    console.log('[播放器初始化] 准备播放流 URL:', streamUrl)
-    
-    // 调试：检查视频元素状态
-    console.log('[DOM 检查] 视频元素状态:', {
-      isConnected: videoElement.isConnected,
-      parentElement: videoElement.parentElement?.tagName,
-      id: videoElement.id,
-      className: videoElement.className
-    })
-    
-    // 如果已有播放器实例，先销毁
-    if (this.player) {
-      this.player.dispose()
+    const source = {
+      src: streamUrl,
+      type: this.getSourceType(streamUrl, options),
     }
 
-    // 创建 Video.js 播放器
-    this.player = videojs(videoElement, {
-      controls: false, // 禁用 Video.js 控制栏，使用自定义控制栏
-      autoplay: false, // 禁用自动播放，等待用户交互
-      preload: 'metadata', // 只预加载元数据，减少网络负载
-      fluid: false,
-      responsive: false,
-      fill: true,
-      aspectRatio: '16:9',
-      html5: {
-        vhs: {
-          // HLS.js 配置
-          overrideNative: true,
-          enableLowInitialPlaylist: true,
-        },
-        nativeAudioTracks: false,
-        nativeVideoTracks: false,
-      },
-      sources: [
-        {
-          src: streamUrl,
-          type: this.getSourceType(streamUrl, options),
-        },
-      ],
+    this.logInfo('播放器初始化', '准备初始化播放器', {
+      playMethod: _playMethod,
+      sourceType: source.type,
+      startPositionTicks: options.startPositionTicks ?? 0,
+      streamUrl,
     })
 
-    // 等待播放器准备就绪
+    if (!this.player) {
+      this.player = videojs(videoElement, {
+        controls: false,
+        autoplay: false,
+        preload: 'metadata',
+        fluid: false,
+        responsive: false,
+        fill: true,
+        aspectRatio: '16:9',
+        html5: {
+          vhs: {
+            overrideNative: true,
+            enableLowInitialPlaylist: true,
+          },
+          nativeAudioTracks: false,
+          nativeVideoTracks: false,
+        },
+        sources: [source],
+      })
+
+      await new Promise<void>((resolve, reject) => {
+        if (!this.player) {
+          reject(new Error('播放器未初始化'))
+          return
+        }
+
+        const timeout = setTimeout(() => {
+          reject(new Error('播放器初始化超时'))
+        }, 10000)
+
+        this.player.ready(() => {
+          clearTimeout(timeout)
+          resolve()
+        })
+      })
+    } else {
+      this.player.pause()
+      this.player.src(source)
+      this.player.load()
+    }
+
     await new Promise<void>((resolve, reject) => {
       if (!this.player) {
         reject(new Error('播放器未初始化'))
         return
       }
 
-      // 设置超时
+      const player = this.player
+      if (player.readyState() >= 1) {
+        resolve()
+        return
+      }
+
       const timeout = setTimeout(() => {
+        cleanup()
         reject(new Error('播放器初始化超时'))
       }, 10000)
 
-      this.player.ready(() => {
+      const cleanup = () => {
         clearTimeout(timeout)
-        resolve()
-      })
+        player.off('loadedmetadata', handleLoadedMetadata)
+        player.off('canplay', handleCanPlay)
+        player.off('error', handleError)
+      }
 
-      // 监听错误
-      this.player.on('error', () => {
-        clearTimeout(timeout)
-        const error = this.player?.error()
+      const handleLoadedMetadata = () => {
+        cleanup()
+        resolve()
+      }
+
+      const handleCanPlay = () => {
+        cleanup()
+        resolve()
+      }
+
+      const handleError = () => {
+        const error = player.error()
+        cleanup()
         console.error('Video.js 播放器错误:', {
           code: error?.code,
           message: error?.message,
@@ -357,31 +1007,33 @@ export class VideoService {
           MEDIA_ERR_DECODE: error?.code === 3,
           MEDIA_ERR_SRC_NOT_SUPPORTED: error?.code === 4,
           streamUrl,
-          playMethod: _playMethod
+          playMethod: _playMethod,
         })
-        
-        // 获取 video 元素的详细状态
-        const videoElement = this.player?.el()?.querySelector('video')
-        if (videoElement) {
+
+        const currentVideoElement = player.el()?.querySelector('video')
+        if (currentVideoElement) {
           console.error('[视频错误] Video 元素状态:', {
-            src: videoElement.src,
-            currentSrc: videoElement.currentSrc,
-            networkState: videoElement.networkState,
-            readyState: videoElement.readyState,
-            paused: videoElement.paused,
-            ended: videoElement.ended,
-            duration: videoElement.duration,
+            src: currentVideoElement.src,
+            currentSrc: currentVideoElement.currentSrc,
+            networkState: currentVideoElement.networkState,
+            readyState: currentVideoElement.readyState,
+            paused: currentVideoElement.paused,
+            ended: currentVideoElement.ended,
+            duration: currentVideoElement.duration,
           })
         }
-        
-        // 如果是网络错误，尝试重新加载
-        if (error?.code === 2) { // MEDIA_ERR_NETWORK
+
+        if (error?.code === 2) {
           console.log('检测到网络错误，尝试重新加载...')
           this.handleNetworkError(streamUrl)
         }
-        
+
         reject(new Error(error?.message || '播放器错误'))
-      })
+      }
+
+      player.on('loadedmetadata', handleLoadedMetadata)
+      player.on('canplay', handleCanPlay)
+      player.on('error', handleError)
     })
 
     // 设置初始播放位置
@@ -391,7 +1043,7 @@ export class VideoService {
     }
 
     // 不自动取消静音，等待用户交互
-    console.log('播放器初始化完成，等待用户交互开始播放')
+    this.logInfo('播放器初始化', '播放器初始化完成，等待用户交互开始播放')
   }
 
   /**
@@ -402,7 +1054,7 @@ export class VideoService {
   private handleNetworkError(streamUrl: string): void {
     if (!this.player) return
     
-    console.log('尝试重新加载视频流...')
+    this.logInfo('播放器', '尝试重新加载视频流')
     
     // 重新加载视频源
     setTimeout(() => {
@@ -472,26 +1124,28 @@ export class VideoService {
     playSessionId: string,
     playMethod: PlayMethod
   ): string {
+    const negotiatedUrl = this.buildNegotiatedPlaybackUrl(mediaSource, playMethod)
+    if (negotiatedUrl) {
+      this.logInfo('播放流', '使用 PlaybackInfo 返回的协商 URL', negotiatedUrl)
+      return negotiatedUrl
+    }
+
     const params = new URLSearchParams()
+    const tokenParams = getCompatibleTokenQueryParams(this.getApiKey())
+    const shouldForceAudioCompatiblePlayback = this.shouldForceAudioCompatiblePlayback(
+      mediaSource,
+      options
+    )
 
     // 基础参数
     params.append('MediaSourceId', mediaSource.id)
     params.append('PlaySessionId', playSessionId)
-    params.append(getTokenQueryParamName(this.serverType), this.getApiKey())
+    params.append('api_key', tokenParams.api_key)
+    params.append('ApiKey', tokenParams.ApiKey)
 
     // 支持外部流（STRM 文件）
     params.append('EnableRedirection', 'true')
     params.append('EnableRemoteMedia', 'true')
-
-    // 调试信息
-    console.log('构建流 URL:', {
-      itemId,
-      mediaSourceId: mediaSource.id,
-      playSessionId,
-      playMethod,
-      serverUrl: this.serverUrl,
-      hasAccessToken: !!this.accessToken
-    })
 
     // 根据播放方法设置参数
     if (playMethod === 'DirectPlay') {
@@ -500,30 +1154,44 @@ export class VideoService {
     } else if (playMethod === 'DirectStream') {
       // DirectStream: 重新封装容器，但不转码
       params.append('Static', 'false')
-      
-      // 对于 STRM 文件，使用更宽松的参数
-      const isStrmFile = mediaSource.path?.toLowerCase().endsWith('.strm')
-      if (isStrmFile) {
-        console.log('为 STRM 文件配置 DirectStream 参数')
-        // 不强制指定编解码器，让 Emby 自动选择
-        params.append('Container', 'mp4,mkv,webm') // 支持多种容器格式
+
+      if (shouldForceAudioCompatiblePlayback) {
+        params.append('AllowVideoStreamCopy', 'true')
+        params.append('AllowAudioStreamCopy', 'false')
+        params.append('AudioCodec', options.audioCodec || 'aac')
+        if (options.maxAudioChannels) {
+          params.append('MaxAudioChannels', options.maxAudioChannels.toString())
+        }
       } else {
-        // 保持原始编解码器
-        if (mediaSource.mediaStreams) {
-          const videoStream = mediaSource.mediaStreams.find(s => s.type === 'Video')
-          const audioStream = mediaSource.mediaStreams.find(s => s.type === 'Audio')
-          
-          if (videoStream?.codec) {
-            params.append('VideoCodec', videoStream.codec)
-          }
-          if (audioStream?.codec) {
-            params.append('AudioCodec', audioStream.codec)
+        // 对于 STRM 文件，使用更宽松的参数
+        const isStrmFile = mediaSource.path?.toLowerCase().endsWith('.strm')
+        if (isStrmFile) {
+          this.logInfo('播放流', '为 STRM 文件配置 DirectStream 参数')
+          // 不强制指定编解码器，让 Emby 自动选择
+          params.append('Container', 'mp4,mkv,webm') // 支持多种容器格式
+        } else {
+          // 保持原始编解码器
+          if (mediaSource.mediaStreams) {
+            const videoStream = mediaSource.mediaStreams.find(s => s.type === 'Video')
+            const audioStream = mediaSource.mediaStreams.find(s => s.type === 'Audio')
+
+            if (videoStream?.codec) {
+              params.append('VideoCodec', videoStream.codec)
+            }
+            if (audioStream?.codec) {
+              params.append('AudioCodec', audioStream.codec)
+            }
           }
         }
       }
     } else {
       // Transcode: 完全转码
       params.append('Static', 'false')
+
+      if (shouldForceAudioCompatiblePlayback) {
+        params.append('AllowVideoStreamCopy', 'true')
+        params.append('AllowAudioStreamCopy', 'false')
+      }
       
       // 转码参数
       if (options.maxStreamingBitrate) {
@@ -534,15 +1202,15 @@ export class VideoService {
         params.append('AudioCodec', options.audioCodec)
       }
 
-      if (options.videoCodec) {
+      if (options.videoCodec && !shouldForceAudioCompatiblePlayback) {
         params.append('VideoCodec', options.videoCodec)
       }
 
-      if (options.maxWidth) {
+      if (options.maxWidth && !shouldForceAudioCompatiblePlayback) {
         params.append('MaxWidth', options.maxWidth.toString())
       }
 
-      if (options.maxHeight) {
+      if (options.maxHeight && !shouldForceAudioCompatiblePlayback) {
         params.append('MaxHeight', options.maxHeight.toString())
       }
 
@@ -572,9 +1240,14 @@ export class VideoService {
         params.append('TranscodingContainer', options.transcodingContainer)
       }
     } else if (playMethod === 'Transcode') {
-      // 转码时默认使用 HLS，因为它更好地支持 seeking
-      params.append('TranscodingProtocol', 'hls')
-      params.append('TranscodingContainer', 'ts')
+      if (shouldForceAudioCompatiblePlayback) {
+        params.append('TranscodingProtocol', 'progressive')
+        params.append('TranscodingContainer', 'mp4')
+      } else {
+        // 转码时默认使用 HLS，因为它更好地支持 seeking
+        params.append('TranscodingProtocol', 'hls')
+        params.append('TranscodingContainer', 'ts')
+      }
     }
 
     // 添加 StartTimeTicks 参数以支持 seeking
@@ -585,11 +1258,39 @@ export class VideoService {
     const baseUrl = this.getBaseUrl()
     const finalUrl = `${baseUrl}/Videos/${itemId}/stream?${params.toString()}`
     
-    // 调试信息
-    console.log('最终流 URL:', finalUrl)
-    console.log('URL 参数:', Object.fromEntries(params.entries()))
+    this.logInfo('播放流', '构建回退流 URL', finalUrl)
     
     return finalUrl
+  }
+
+  private buildNegotiatedPlaybackUrl(
+    mediaSource: MediaSource,
+    playMethod: PlayMethod
+  ): string | null {
+    const rawUrl =
+      playMethod === 'Transcode'
+        ? mediaSource.transcodingUrl
+        : playMethod === 'DirectStream'
+          ? mediaSource.directStreamUrl || mediaSource.transcodingUrl
+          : mediaSource.streamUrl
+
+    if (!rawUrl) {
+      return null
+    }
+
+    const tokenParams = getCompatibleTokenQueryParams(this.getApiKey())
+    const baseUrl = this.getBaseUrl()
+    const url = new URL(rawUrl, `${baseUrl}/`)
+
+    if (!url.searchParams.has('api_key')) {
+      url.searchParams.set('api_key', tokenParams.api_key)
+    }
+
+    if (!url.searchParams.has('ApiKey')) {
+      url.searchParams.set('ApiKey', tokenParams.ApiKey)
+    }
+
+    return url.toString()
   }
 
   /**
@@ -739,20 +1440,40 @@ export class VideoService {
    * @returns 音轨列表
    */
   getAudioTracks(): AudioTrack[] {
+    const mediaSourceTracks =
+      this.currentMediaSource?.mediaStreams
+        ?.filter((stream) => stream.type === 'Audio')
+        .map((stream) => ({
+          index: stream.index,
+          displayTitle:
+            stream.displayTitle || this.buildAudioTrackTitle(stream.index, stream.language),
+          language: stream.language,
+          codec: stream.codec,
+          channels: stream.channels,
+          channelLayout: stream.channelLayout,
+          sampleRate: stream.sampleRate,
+        })) || []
+
+    if (mediaSourceTracks.length > 0) {
+      return mediaSourceTracks
+    }
+
     if (!this.player) {
       return []
     }
 
-    const audioTracks = this.player.audioTracks()
+    const audioTracks = this.player.audioTracks?.()
+    if (!audioTracks) {
+      return []
+    }
     const tracks: AudioTrack[] = []
 
     for (let i = 0; i < audioTracks.length; i++) {
-      // 使用类型断言访问轨道
       const track = (audioTracks as any)[i]
       if (track) {
         tracks.push({
           index: i,
-          displayTitle: track.label || `音轨 ${i + 1}`,
+          displayTitle: track.label || this.buildAudioTrackTitle(i, track.language),
           language: track.language,
           codec: '',
         })
@@ -768,20 +1489,41 @@ export class VideoService {
    * @returns 字幕轨道列表
    */
   getSubtitleTracks(): SubtitleTrack[] {
+    const mediaSourceTracks =
+      this.currentMediaSource?.mediaStreams
+        ?.filter((stream) => stream.type === 'Subtitle')
+        .map((stream) => ({
+          index: stream.index,
+          displayTitle:
+            stream.displayTitle || this.buildSubtitleTrackTitle(stream.index, stream.language),
+          language: stream.language,
+          codec: stream.codec,
+          isExternal: stream.isExternal,
+          isTextSubtitleStream: stream.isTextSubtitleStream,
+          supportsExternalStream: stream.supportsExternalStream,
+          deliveryUrl: stream.deliveryUrl,
+        })) || []
+
+    if (mediaSourceTracks.length > 0) {
+      return mediaSourceTracks
+    }
+
     if (!this.player) {
       return []
     }
 
-    const textTracks = this.player.textTracks()
+    const textTracks = this.player.textTracks?.()
+    if (!textTracks) {
+      return []
+    }
     const tracks: SubtitleTrack[] = []
 
     for (let i = 0; i < textTracks.length; i++) {
-      // 使用类型断言访问轨道
       const track = (textTracks as any)[i]
       if (track && (track.kind === 'subtitles' || track.kind === 'captions')) {
         tracks.push({
           index: i,
-          displayTitle: track.label || `字幕 ${i + 1}`,
+          displayTitle: track.label || this.buildSubtitleTrackTitle(i, track.language),
           language: track.language,
           codec: '',
           isTextSubtitleStream: true,
@@ -798,13 +1540,18 @@ export class VideoService {
    * @param index - 音轨索引
    */
   setAudioTrack(index: number): void {
+    this.currentAudioStreamIndex = index
+
     if (!this.player) {
       return
     }
 
-    const audioTracks = this.player.audioTracks()
+    const audioTracks = this.player.audioTracks?.()
+    if (!audioTracks) {
+      return
+    }
+
     for (let i = 0; i < audioTracks.length; i++) {
-      // 使用类型断言访问轨道
       const track = (audioTracks as any)[i]
       if (track) {
         track.enabled = i === index
@@ -818,18 +1565,51 @@ export class VideoService {
    * @param index - 字幕索引（-1 表示关闭字幕）
    */
   setSubtitleTrack(index: number): void {
+    this.currentSubtitleStreamIndex = index >= 0 ? index : undefined
+
     if (!this.player) {
       return
     }
 
-    const textTracks = this.player.textTracks()
+    const textTracks = this.player.textTracks?.()
+    if (!textTracks) {
+      return
+    }
+
     for (let i = 0; i < textTracks.length; i++) {
-      // 使用类型断言访问轨道
       const track = (textTracks as any)[i]
       if (track && (track.kind === 'subtitles' || track.kind === 'captions')) {
         track.mode = i === index ? 'showing' : 'hidden'
       }
     }
+  }
+
+  getCurrentMediaSource(): MediaSource | null {
+    return this.currentMediaSource
+  }
+
+  getCurrentAudioStreamIndex(): number | undefined {
+    return this.currentAudioStreamIndex
+  }
+
+  getCurrentSubtitleStreamIndex(): number | undefined {
+    return this.currentSubtitleStreamIndex
+  }
+
+  private buildAudioTrackTitle(index: number, language?: string): string {
+    if (language) {
+      return language
+    }
+
+    return `音轨 ${index + 1}`
+  }
+
+  private buildSubtitleTrackTitle(index: number, language?: string): string {
+    if (language) {
+      return language
+    }
+
+    return `字幕 ${index + 1}`
   }
 
   /**
@@ -939,6 +1719,11 @@ export class VideoService {
       this.player.dispose()
       this.player = null
     }
+    this.currentMediaSource = null
+    this.currentAudioStreamIndex = undefined
+    this.currentSubtitleStreamIndex = undefined
+    this.currentPlayMethod = null
+    this.lastError = null
   }
 
   /**
@@ -979,10 +1764,7 @@ export class VideoService {
     // 移除末尾的斜杠
     baseUrl = baseUrl.replace(/\/$/, '')
 
-    const finalUrl = getApiBaseUrl(baseUrl, this.serverType)
-    console.log('基础 URL:', finalUrl)
-    
-    return finalUrl
+    return getApiBaseUrl(baseUrl, this.serverType)
   }
 }
 

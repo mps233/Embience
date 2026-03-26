@@ -55,6 +55,16 @@ export function getTokenQueryParamName(serverType: MediaServerType): 'api_key' |
 }
 
 /**
+ * 获取兼容 Emby/Jellyfin 的 token 查询参数
+ */
+export function getCompatibleTokenQueryParams(token: string): Record<'api_key' | 'ApiKey', string> {
+  return {
+    api_key: token,
+    ApiKey: token,
+  }
+}
+
+/**
  * 构建完整 API URL
  */
 export function buildApiUrl(
@@ -89,8 +99,29 @@ export function buildAuthenticatedApiUrl(
 ): string {
   return buildApiUrl(serverUrl, path, serverType, {
     ...query,
-    [getTokenQueryParamName(serverType)]: token,
+    ...getCompatibleTokenQueryParams(token),
   })
+}
+
+function inferServerTypeFromPayload(payload: unknown): MediaServerType | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const record = payload as Record<string, unknown>
+  const productName = String(record.ProductName || record.productName || '')
+  const serverName = String(record.ServerName || record.serverName || '')
+  const combined = `${productName} ${serverName}`.toLowerCase()
+
+  if (combined.includes('jellyfin')) {
+    return 'jellyfin'
+  }
+
+  if (combined.includes('emby')) {
+    return 'emby'
+  }
+
+  return null
 }
 
 /**
@@ -104,19 +135,27 @@ export async function detectMediaServer(serverUrl: string): Promise<MediaServerC
   for (const serverType of candidates) {
     const apiBaseUrl = getApiBaseUrl(normalizedUrl, serverType)
 
-    if (await probeEndpoint(`${apiBaseUrl}/System/Info`)) {
-      return { serverUrl: normalizedUrl, serverType }
+    const systemInfo = await probeEndpoint(`${apiBaseUrl}/System/Info`)
+    if (systemInfo.ok) {
+      return {
+        serverUrl: normalizedUrl,
+        serverType: inferServerTypeFromPayload(systemInfo.payload) || serverType,
+      }
     }
 
-    if (await probeEndpoint(`${apiBaseUrl}/Users/Public`)) {
-      return { serverUrl: normalizedUrl, serverType }
+    const publicUsers = await probeEndpoint(`${apiBaseUrl}/Users/Public`)
+    if (publicUsers.ok) {
+      return {
+        serverUrl: normalizedUrl,
+        serverType: inferServerTypeFromPayload(publicUsers.payload) || serverType,
+      }
     }
   }
 
   throw new Error('无法识别服务器类型，请确认输入的是有效的 Emby 或 Jellyfin 服务器地址')
 }
 
-async function probeEndpoint(url: string): Promise<boolean> {
+async function probeEndpoint(url: string): Promise<{ ok: boolean; payload?: unknown }> {
   try {
     const response = await fetch(url, {
       method: 'GET',
@@ -125,8 +164,19 @@ async function probeEndpoint(url: string): Promise<boolean> {
       },
     })
 
-    return response.ok
+    if (!response.ok) {
+      return { ok: false }
+    }
+
+    try {
+      return {
+        ok: true,
+        payload: await response.json(),
+      }
+    } catch {
+      return { ok: true }
+    }
   } catch {
-    return false
+    return { ok: false }
   }
 }

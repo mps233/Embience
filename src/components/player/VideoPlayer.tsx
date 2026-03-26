@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import './VideoPlayer.css'
 import type { MediaItem } from '@/types/emby'
-import type { PlaybackProgressReport } from '@/types/player'
+import type { PlaybackOptions, PlaybackProgressReport } from '@/types/player'
 import { createVideoService } from '@/services/player/videoService'
 import { createProgressTracker } from '@/services/player/progressTracker'
 import { createEmbyClient } from '@/services/api/embyClient'
@@ -138,20 +138,11 @@ const detectEmbeddedSubtitles = (videoElement: HTMLVideoElement): DetectedSubtit
   try {
     // 检查 video 元素的 textTracks
     const textTracks = videoElement.textTracks
-    
-    console.log('[字幕检测] 开始检测内封字幕')
-    console.log('[字幕检测] textTracks 数量:', textTracks?.length || 0)
-    
+
     if (textTracks && textTracks.length > 0) {
       for (let i = 0; i < textTracks.length; i++) {
         const track = textTracks[i]
-        console.log(`[字幕检测] Track ${i}:`, {
-          kind: track.kind,
-          label: track.label,
-          language: track.language,
-          mode: track.mode
-        })
-        
+
         if (track.kind === 'subtitles' || track.kind === 'captions') {
           embeddedSubtitles.push({
             index: i,
@@ -162,9 +153,6 @@ const detectEmbeddedSubtitles = (videoElement: HTMLVideoElement): DetectedSubtit
           })
         }
       }
-      console.log('[字幕检测] 检测到内封字幕:', embeddedSubtitles.length, '个')
-    } else {
-      console.log('[字幕检测] 未检测到 textTracks')
     }
   } catch (error) {
     console.warn('[字幕检测] 检测内封字幕时出错:', error)
@@ -218,6 +206,10 @@ export function VideoPlayer({
   // 字幕和音轨菜单显示状态
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false)
   const [showAudioMenu, setShowAudioMenu] = useState(false)
+  const subtitleMenuRef = useRef<HTMLDivElement>(null)
+  const subtitleButtonRef = useRef<HTMLButtonElement>(null)
+  const audioMenuRef = useRef<HTMLDivElement>(null)
+  const audioButtonRef = useRef<HTMLButtonElement>(null)
   
   // 弹幕功能
   const { settings: danmakuSettings, updateSettings: updateDanmakuSettings } = useDanmakuStore()
@@ -272,13 +264,8 @@ export function VideoPlayer({
   // 智能字幕检测 - 使用 useMemo 优化性能
   const availableSubtitles = useMemo(() => {
     const videoElement = videoRef.current
-    
-    console.log('[字幕检测] 开始智能字幕检测')
-    console.log('[字幕检测] videoElement 存在:', !!videoElement)
-    console.log('[字幕检测] videoLoaded 状态:', videoLoaded)
-    
+
     if (!videoElement) {
-      console.log('[字幕检测] 视频元素不存在，返回外部字幕')
       return findExternalSubtitles(mediaItem)
     }
 
@@ -288,16 +275,12 @@ export function VideoPlayer({
       
       // 如果有内封字幕，优先使用
       if (embeddedSubtitles.length > 0) {
-        console.log('[字幕检测] 使用内封字幕:', embeddedSubtitles)
         return embeddedSubtitles
       }
     }
 
     // 备选：查找外部字幕文件
-    const externalSubtitles = findExternalSubtitles(mediaItem)
-    console.log('[字幕检测] 使用外部字幕:', externalSubtitles)
-    
-    return externalSubtitles
+    return findExternalSubtitles(mediaItem)
   }, [mediaItem, videoLoaded])
 
   // 构建播放进度报告
@@ -319,8 +302,11 @@ export function VideoPlayer({
       volumeLevel: videoService.getVolume(),
       playMethod: sessionInfo.playMethod as any,
       canSeek: true,
-      audioStreamIndex: selectedAudioTrack,
-      subtitleStreamIndex: selectedSubtitleTrack >= 0 ? selectedSubtitleTrack : undefined,
+      audioStreamIndex: videoService.getCurrentAudioStreamIndex() ?? selectedAudioTrack,
+      subtitleStreamIndex:
+        videoService.getCurrentSubtitleStreamIndex() ?? (
+          selectedSubtitleTrack >= 0 ? selectedSubtitleTrack : undefined
+        ),
       eventName,
     }
   }
@@ -356,6 +342,153 @@ export function VideoPlayer({
     } catch (error) {
       console.error('报告播放进度失败:', error)
     }
+  }
+
+  const getBasePlaybackOptions = (
+    overrides: Partial<PlaybackOptions> = {}
+  ): PlaybackOptions => ({
+    startPositionTicks,
+    maxStreamingBitrate: 140000000,
+    maxAudioChannels: 2,
+    audioCodec: 'aac',
+    videoCodec: 'h264',
+    ...overrides,
+  })
+
+  const syncSelectedStreamsFromService = () => {
+    const currentMediaSource = videoServiceRef.current.getCurrentMediaSource()
+    const audioTracks = videoServiceRef.current.getAudioTracks()
+    const subtitleTracks = videoServiceRef.current.getSubtitleTracks()
+
+    const audioStreamIndex =
+      videoServiceRef.current.getCurrentAudioStreamIndex() ??
+      currentMediaSource?.defaultAudioStreamIndex ??
+      audioTracks[0]?.index ??
+      0
+    const subtitleStreamIndex =
+      videoServiceRef.current.getCurrentSubtitleStreamIndex() ??
+      currentMediaSource?.defaultSubtitleStreamIndex ??
+      (subtitleTracks.length > 0 ? subtitleTracks[0].index : -1)
+
+    setSelectedAudioTrack(audioStreamIndex)
+    setSelectedSubtitleTrack(
+      typeof subtitleStreamIndex === 'number' ? subtitleStreamIndex : -1
+    )
+
+    return {
+      audioStreamIndex,
+      subtitleStreamIndex: typeof subtitleStreamIndex === 'number' ? subtitleStreamIndex : -1,
+    }
+  }
+
+  const initializePlaybackSession = async (
+    playbackOverrides: Partial<PlaybackOptions> = {},
+    behavior: {
+      resetPlayedState?: boolean
+      autoResume?: boolean
+      reportStart?: boolean
+      announceStart?: boolean
+    } = {}
+  ) => {
+    const videoElement = videoRef.current
+    const videoService = videoServiceRef.current
+
+    if (!videoElement) {
+      throw new Error('视频元素不存在')
+    }
+
+    setError(null)
+    setTechnicalDetails(null)
+
+    if (!progressTrackerRef.current && serverUrl && accessToken) {
+      const apiClient = createEmbyClient({
+        serverUrl,
+        serverType: serverType || undefined,
+        accessToken,
+      })
+      progressTrackerRef.current = createProgressTracker({
+        apiClient,
+        reportInterval: 10000,
+        serverUrl,
+        serverType: serverType || 'emby',
+        apiToken: accessToken,
+      })
+    }
+
+    const sessionInfo = await videoService.initializePlayback(
+      videoElement,
+      mediaItem,
+      getBasePlaybackOptions(playbackOverrides)
+    )
+
+    sessionInfoRef.current = sessionInfo
+    const streamSelection = syncSelectedStreamsFromService()
+    setCurrentItem(mediaItem, sessionInfo.playSessionId, sessionInfo.playMethod)
+
+    const currentMediaSource = videoService.getCurrentMediaSource()
+    if (currentMediaSource) {
+      const videoStream = currentMediaSource.mediaStreams?.find((stream) => stream.type === 'Video')
+      const audioStream = currentMediaSource.mediaStreams?.find((stream) => stream.type === 'Audio')
+
+      const details = [
+        `播放方法: ${sessionInfo.playMethod}`,
+        videoStream ? `视频: ${videoStream.codec} ${videoStream.width}x${videoStream.height}` : '',
+        audioStream ? `音频: ${audioStream.codec} ${audioStream.channels}声道` : '',
+        currentMediaSource.bitrate
+          ? `比特率: ${Math.round(currentMediaSource.bitrate / 1000000)}Mbps`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' | ')
+
+      setTechnicalDetails(details)
+    }
+
+    if (progressTimerRef.current !== null) {
+      window.clearInterval(progressTimerRef.current)
+      progressTimerRef.current = null
+    }
+
+    const progressTracker = progressTrackerRef.current
+    if (progressTracker && behavior.reportStart !== false) {
+      if (behavior.resetPlayedState && mediaItem.userData?.played) {
+        try {
+          const apiClient = createEmbyClient({
+            serverUrl: serverUrl || '',
+            serverType: serverType || undefined,
+            accessToken: accessToken || undefined,
+          })
+          await apiClient.delete(`/Users/${user?.id}/PlayedItems/${mediaItem.id}`)
+        } catch (resetError) {
+          console.error('取消"已播放"标记失败:', resetError)
+        }
+      }
+
+      const startReport = buildProgressReport()
+      if (startReport) {
+        await progressTracker.reportPlaybackStart({
+          ...startReport,
+          audioStreamIndex: streamSelection.audioStreamIndex,
+          subtitleStreamIndex:
+            streamSelection.subtitleStreamIndex >= 0
+              ? streamSelection.subtitleStreamIndex
+              : undefined,
+        })
+        progressTimerRef.current = window.setInterval(() => {
+          reportProgress('TimeUpdate')
+        }, 10000)
+      }
+    }
+
+    if (behavior.autoResume) {
+      await videoService.play()
+    }
+
+    if (behavior.announceStart !== false) {
+      onPlaybackStart?.(sessionInfo)
+    }
+
+    return sessionInfo
   }
   // 初始化播放器和事件监听
   useEffect(() => {
@@ -472,19 +605,11 @@ export function VideoPlayer({
 
     // 视频元数据加载完成 - 触发字幕检测
     const handleLoadedMetadata = () => {
-      console.log('[字幕检测] 视频元数据加载完成，触发字幕检测')
       setVideoLoaded(true)
-      
-      // 记录视频的宽高比信息
-      if (videoElement.videoWidth && videoElement.videoHeight) {
-        const aspectRatio = videoElement.videoWidth / videoElement.videoHeight
-        console.log('[视频宽高比]', aspectRatio, `(${videoElement.videoWidth}x${videoElement.videoHeight})`)
-      }
     }
 
     // 视频可以播放时 - 再次触发字幕检测（确保 textTracks 已加载）
     const handleCanPlay = () => {
-      console.log('[字幕检测] 视频可以播放，再次触发字幕检测')
       // 延迟一点时间，确保 textTracks 完全加载
       setTimeout(() => {
         setVideoLoaded(prev => !prev) // 切换状态以触发 useMemo 重新计算
@@ -561,101 +686,8 @@ export function VideoPlayer({
     // 初始化播放
     const initPlayback = async () => {
       try {
-        setError(null)
-        setTechnicalDetails(null)
-        
         console.log('[播放初始化] 开始初始化播放')
-        
-        // 初始化进度跟踪器
-        if (!progressTrackerRef.current && serverUrl && accessToken) {
-          const apiClient = createEmbyClient({
-            serverUrl,
-            serverType: serverType || undefined,
-            accessToken,
-          })
-          progressTrackerRef.current = createProgressTracker({
-            apiClient,
-            reportInterval: 10000, // 10 秒
-            serverUrl, // 传递 serverUrl 用于 sendBeacon
-            serverType: serverType || 'emby',
-            apiToken: accessToken, // 传递 API Token 用于 sendBeacon 认证
-          })
-        }
-        
-        const sessionInfo = await videoService.initializePlayback(
-          videoElement,
-          mediaItem,
-          {
-            startPositionTicks,
-            maxStreamingBitrate: 140000000, // 140 Mbps
-            audioCodec: 'aac',
-            videoCodec: 'h264',
-          }
-        )
-
-        // 保存会话信息
-        sessionInfoRef.current = sessionInfo
-
-        // 更新播放器状态
-        setCurrentItem(mediaItem, sessionInfo.playSessionId, sessionInfo.playMethod)
-
-        // 立即同步播放状态（使用原生 video 元素）
-        setTimeout(() => {
-          const currentlyPlaying = !videoElement.paused
-          setIsPlaying(currentlyPlaying)
-        }, 500)
-
-        // 报告播放开始或恢复
-        const progressTracker = progressTrackerRef.current
-        if (progressTracker) {
-          // 如果视频已标记为已播放，先取消标记（这样 Emby 才会保存播放进度）
-          if (mediaItem.userData?.played) {
-            try {
-              const apiClient = createEmbyClient({
-                serverUrl: serverUrl || '',
-                serverType: serverType || undefined,
-                accessToken: accessToken || undefined,
-              })
-              await apiClient.delete(`/Users/${user?.id}/PlayedItems/${mediaItem.id}`)
-            } catch (error) {
-              console.error('取消"已播放"标记失败:', error)
-            }
-          }
-          
-          const startReport = buildProgressReport()
-          if (startReport) {
-            try {
-              // 总是报告播放开始（Emby 需要知道有新的播放会话）
-              await progressTracker.reportPlaybackStart(startReport)
-              
-              // 启动定时器，每 10 秒自动报告进度
-              progressTimerRef.current = window.setInterval(() => {
-                reportProgress('TimeUpdate')
-              }, 10000)
-            } catch (error) {
-              console.error('报告播放状态失败:', error)
-            }
-          }
-        }
-
-        // 触发播放开始回调
-        onPlaybackStart?.(sessionInfo)
-        
-        // 设置技术详情
-        if (mediaItem.mediaSources && mediaItem.mediaSources.length > 0) {
-          const source = mediaItem.mediaSources[0]
-          const videoStream = source.mediaStreams?.find(s => s.type === 'Video')
-          const audioStream = source.mediaStreams?.find(s => s.type === 'Audio')
-          
-          const details = [
-            `播放方法: ${sessionInfo.playMethod}`,
-            videoStream ? `视频: ${videoStream.codec} ${videoStream.width}x${videoStream.height}` : '',
-            audioStream ? `音频: ${audioStream.codec} ${audioStream.channels}声道` : '',
-            source.bitrate ? `比特率: ${Math.round(source.bitrate / 1000000)}Mbps` : '',
-          ].filter(Boolean).join(' | ')
-          
-          setTechnicalDetails(details)
-        }
+        await initializePlaybackSession({}, { resetPlayedState: true, reportStart: true, announceStart: true })
       } catch (error) {
         console.error('初始化播放失败:', error)
         const errorMessage = error instanceof Error ? error.message : '未知错误'
@@ -943,57 +975,122 @@ export function VideoPlayer({
   }, [aspectRatioMode])
 
   // 切换音轨
-  const handleAudioTrackChange = (index: number) => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-
-    // 设置音轨
-    const audioTracks = (videoElement as any).audioTracks
-    if (audioTracks) {
-      for (let i = 0; i < audioTracks.length; i++) {
-        audioTracks[i].enabled = i === index
-      }
+  const handleAudioTrackChange = async (streamIndex: number) => {
+    if (selectedAudioTrack === streamIndex) {
+      setShowAudioMenu(false)
+      return
     }
 
-    setSelectedAudioTrack(index)
-    setShowAudioMenu(false)
+    const videoService = videoServiceRef.current
+    const currentPositionTicks = videoService.getCurrentPositionTicks()
+    const shouldResumePlayback = isPlaying
 
-    // 报告音轨变化
-    reportProgress('AudioTrackChange')
+    try {
+      setShowAudioMenu(false)
+      await initializePlaybackSession(
+        {
+          startPositionTicks: currentPositionTicks,
+          audioStreamIndex: streamIndex,
+          subtitleStreamIndex: selectedSubtitleTrack,
+        },
+        {
+          autoResume: shouldResumePlayback,
+          reportStart: true,
+          announceStart: false,
+        }
+      )
+      await reportProgress('AudioTrackChange')
+    } catch (error) {
+      console.error('切换音轨失败:', error)
+      setError('切换音轨失败，请稍后重试')
+    }
   }
 
   // 切换字幕
-  const handleSubtitleTrackChange = (index: number) => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-
-    // 设置字幕
-    const textTracks = (videoElement as any).textTracks
-    if (textTracks) {
-      for (let i = 0; i < textTracks.length; i++) {
-        textTracks[i].mode = i === index ? 'showing' : 'hidden'
-      }
+  const handleSubtitleTrackChange = async (streamIndex: number) => {
+    if (selectedSubtitleTrack === streamIndex) {
+      setShowSubtitleMenu(false)
+      return
     }
 
-    setSelectedSubtitleTrack(index)
-    setShowSubtitleMenu(false)
+    const videoService = videoServiceRef.current
+    const currentPositionTicks = videoService.getCurrentPositionTicks()
+    const shouldResumePlayback = isPlaying
 
-    // 报告字幕变化
-    reportProgress('SubtitleTrackChange')
+    try {
+      setShowSubtitleMenu(false)
+      await initializePlaybackSession(
+        {
+          startPositionTicks: currentPositionTicks,
+          audioStreamIndex: selectedAudioTrack,
+          subtitleStreamIndex: streamIndex,
+        },
+        {
+          autoResume: shouldResumePlayback,
+          reportStart: true,
+          announceStart: false,
+        }
+      )
+      await reportProgress('SubtitleTrackChange')
+    } catch (error) {
+      console.error('切换字幕失败:', error)
+      setError('切换字幕失败，请稍后重试')
+    }
   }
   // 获取可用的音轨列表
   const getAudioTracks = () => {
+    const serviceTracks = videoServiceRef.current.getAudioTracks()
+    if (serviceTracks.length > 0) {
+      return serviceTracks
+    }
+
     if (!mediaItem.mediaSources || mediaItem.mediaSources.length === 0) {
       return []
     }
 
     const source = mediaItem.mediaSources[0]
-    return source.mediaStreams?.filter(s => s.type === 'Audio') || []
+    return source.mediaStreams?.filter((stream) => stream.type === 'Audio') || []
   }
 
   // 获取可用的字幕列表 - 使用智能检测的结果
   const getSubtitleTracks = () => {
+    const serviceTracks = videoServiceRef.current.getSubtitleTracks()
+    if (serviceTracks.length > 0) {
+      return serviceTracks
+    }
+
     return availableSubtitles
+  }
+
+  const formatAudioTrackLabel = (track: ReturnType<typeof getAudioTracks>[number], index: number) => {
+    if (track.displayTitle) {
+      return track.displayTitle
+    }
+
+    const parts = [track.language || `音轨 ${index + 1}`]
+    if (track.codec) {
+      parts.push(track.codec.toUpperCase())
+    }
+    if (track.channels) {
+      parts.push(track.channelLayout || `${track.channels}声道`)
+    }
+
+    return parts.join(' · ')
+  }
+
+  const formatSubtitleTrackLabel = (track: ReturnType<typeof getSubtitleTracks>[number], index: number) => {
+    if (track.displayTitle) {
+      return track.displayTitle
+    }
+
+    const parts = [track.language || `字幕 ${index + 1}`]
+    if (track.isExternal) {
+      parts.push('外挂')
+    } else if ('isTextSubtitleStream' in track && track.isTextSubtitleStream) {
+      parts.push('文本')
+    }
+
+    return parts.join(' · ')
   }
 
   // 监听全屏变化
@@ -1056,9 +1153,22 @@ export function VideoPlayer({
 
   // 点击外部关闭菜单
   useEffect(() => {
-    const handleClickOutside = () => {
-      if (showSubtitleMenu || showAudioMenu) {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      const clickedSubtitleArea =
+        !!target &&
+        (subtitleMenuRef.current?.contains(target) ||
+          subtitleButtonRef.current?.contains(target))
+      const clickedAudioArea =
+        !!target &&
+        (audioMenuRef.current?.contains(target) ||
+          audioButtonRef.current?.contains(target))
+
+      if (showSubtitleMenu && !clickedSubtitleArea) {
         setShowSubtitleMenu(false)
+      }
+
+      if (showAudioMenu && !clickedAudioArea) {
         setShowAudioMenu(false)
       }
     }
@@ -1493,6 +1603,7 @@ export function VideoPlayer({
                 {/* 字幕切换按钮 */}
                 <div className="relative">
                   <button
+                    ref={subtitleButtonRef}
                     onClick={() => setShowSubtitleMenu(!showSubtitleMenu)}
                     className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
                       selectedSubtitleTrack >= 0 
@@ -1508,6 +1619,7 @@ export function VideoPlayer({
                   {/* 字幕选择菜单 */}
                   {showSubtitleMenu && (
                     <div 
+                      ref={subtitleMenuRef}
                       className="absolute bottom-12 right-0 min-w-48 rounded-lg border shadow-2xl z-50"
                       style={{
                         backgroundColor: 'rgba(0, 0, 0, 0.95)',
@@ -1537,16 +1649,16 @@ export function VideoPlayer({
                         {getSubtitleTracks().map((track, index) => (
                           <button
                             key={track.index}
-                            onClick={() => handleSubtitleTrackChange(index)}
+                            onClick={() => handleSubtitleTrackChange(track.index)}
                             className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                              selectedSubtitleTrack === index
+                              selectedSubtitleTrack === track.index
                                 ? 'bg-white/[0.15] text-white'
                                 : 'text-white/80 hover:bg-white/[0.1] hover:text-white'
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span>{track.displayTitle || `字幕 ${index + 1}`}</span>
-                              {selectedSubtitleTrack === index && (
+                              <span>{formatSubtitleTrackLabel(track, index)}</span>
+                              {selectedSubtitleTrack === track.index && (
                                 <div className="w-2 h-2 rounded-full bg-white" />
                               )}
                             </div>
@@ -1559,6 +1671,7 @@ export function VideoPlayer({
                 {/* 音轨切换按钮 */}
                 <div className="relative">
                   <button
+                    ref={audioButtonRef}
                     onClick={() => setShowAudioMenu(!showAudioMenu)}
                     className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95 text-white/85"
                     title="音轨设置"
@@ -1570,6 +1683,7 @@ export function VideoPlayer({
                   {/* 音轨选择菜单 */}
                   {showAudioMenu && (
                     <div 
+                      ref={audioMenuRef}
                       className="absolute bottom-12 right-0 min-w-48 rounded-lg border shadow-2xl z-50"
                       style={{
                         backgroundColor: 'rgba(0, 0, 0, 0.95)',
@@ -1582,16 +1696,16 @@ export function VideoPlayer({
                         {getAudioTracks().map((track, index) => (
                           <button
                             key={track.index}
-                            onClick={() => handleAudioTrackChange(index)}
+                            onClick={() => handleAudioTrackChange(track.index)}
                             className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                              selectedAudioTrack === index
+                              selectedAudioTrack === track.index
                                 ? 'bg-white/[0.15] text-white'
                                 : 'text-white/80 hover:bg-white/[0.1] hover:text-white'
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span>{track.displayTitle || `音轨 ${index + 1}`}</span>
-                              {selectedAudioTrack === index && (
+                              <span>{formatAudioTrackLabel(track, index)}</span>
+                              {selectedAudioTrack === track.index && (
                                 <div className="w-2 h-2 rounded-full bg-white" />
                               )}
                             </div>

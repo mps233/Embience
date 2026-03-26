@@ -3,6 +3,7 @@
  */
 
 import { runtimeConfig } from '@/config/runtimeConfig'
+import { getStorageItem } from '@/utils/storage'
 
 // 应用信息
 export const APP_NAME = runtimeConfig.appName
@@ -12,6 +13,10 @@ export const CLIENT_NAME = runtimeConfig.clientName
 // API 配置
 export const DEFAULT_EMBY_SERVER_URL = runtimeConfig.embyServerUrl
 export const DANMAKU_API_URL = runtimeConfig.danmakuApiUrl
+
+export function getDanmakuApiUrl(): string {
+  return getStorageItem<string>(STORAGE_KEYS.DANMAKU_SERVER_URL) || DANMAKU_API_URL
+}
 
 // 缓存时间配置（毫秒）
 export const CACHE_TIME = {
@@ -66,6 +71,7 @@ export const STORAGE_KEYS = {
   USER_INFO: 'emby_user_info',
   SERVER_URL: 'emby_server_url',
   SERVER_TYPE: 'media_server_type',
+  DANMAKU_SERVER_URL: 'danmaku_server_url',
   DEVICE_INFO: 'emby_device_info',
   THEME: 'emby_theme',
   FILTER_PREFERENCES: 'emby_filter_preferences',

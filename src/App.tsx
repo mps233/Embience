@@ -32,7 +32,7 @@ const queryClient = new QueryClient({
  * 配置路由和全局状态初始化
  */
 function App() {
-  const { serverUrl, isAuthenticated, initializeFromStorage } = useAuthStore()
+  const { isAuthenticated, initializeFromStorage } = useAuthStore()
 
   // 应用启动时从 localStorage 初始化认证状态
   useEffect(() => {
@@ -131,8 +131,6 @@ function App() {
             element={
               isAuthenticated ? (
                 <Navigate to="/home" replace />
-              ) : serverUrl ? (
-                <Navigate to="/login" replace />
               ) : (
                 <Navigate to="/server-config" replace />
               )
@@ -158,4 +156,3 @@ function App() {
 }
 
 export default App
-
