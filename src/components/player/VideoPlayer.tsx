@@ -1272,16 +1272,27 @@ export function VideoPlayer({
     return mediaItem.seriesName || mediaItem.name
   }
 
+  const windowedPlayerWidth = videoContainerSize.width > 0 ? `${videoContainerSize.width}px` : '100%'
+
   return (
     <div 
       ref={containerRef}
-      className="h-full rounded-xl border flex items-center justify-center overflow-hidden relative"
+      className={`h-full flex items-center justify-center overflow-hidden relative ${
+        isFullscreen ? '' : 'rounded-xl border'
+      }`}
       onMouseMove={handleMouseMove}
       style={{
-        background: 'linear-gradient(135deg, rgba(37, 38, 41, 0.95) 0%, rgba(33, 34, 37, 0.95) 100%)',
-        borderColor: 'rgba(255, 255, 255, 0.12)',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
+        background: isFullscreen
+          ? '#000'
+          : 'linear-gradient(135deg, rgba(37, 38, 41, 0.95) 0%, rgba(33, 34, 37, 0.95) 100%)',
+        borderColor: isFullscreen ? 'transparent' : 'rgba(255, 255, 255, 0.12)',
+        boxShadow: isFullscreen
+          ? 'none'
+          : '0 20px 60px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
         cursor: isFullscreen && !showControls ? 'none' : 'default',
+        width: isFullscreen ? '100vw' : windowedPlayerWidth,
+        maxWidth: '100%',
+        borderRadius: isFullscreen ? '0' : undefined,
       }}
     >
       {/* 错误消息 */}
@@ -1295,12 +1306,12 @@ export function VideoPlayer({
       )}
 
       {/* 视频和控制栏的包装器 */}
-      <div className="flex flex-col">
+      <div className="flex w-full min-w-0 flex-col">
       {/* 视频播放器容器 */}
       <div 
         className="relative bg-black overflow-hidden cursor-pointer flex-shrink-0 flex items-center justify-center" 
         style={{ 
-          width: isFullscreen ? '100vw' : (videoContainerSize.width > 0 ? `${videoContainerSize.width}px` : '100%'),
+          width: '100%',
           height: isFullscreen ? '100vh' : (videoContainerSize.height > 0 ? `${videoContainerSize.height}px` : 'auto'),
           borderRadius: isFullscreen ? '0' : '0.75rem 0.75rem 0 0'
         }}
@@ -1403,7 +1414,7 @@ export function VideoPlayer({
         }}
       >
           {/* 进度条容器 - 全宽无内边距 */}
-          <div className="pt-3 pb-1 px-6">
+          <div className="px-4 pb-1 pt-2.5 xl:px-6 xl:pt-3">
             <div className="relative group">
               {/* 进度条背景 */}
               <div className="h-1.5 bg-white/[0.12] rounded-full overflow-visible relative">
@@ -1463,30 +1474,30 @@ export function VideoPlayer({
             </div>
           </div>
           {/* 控制按钮栏 */}
-          <div className="px-6 py-2.5 flex items-center">
-            <div className="flex items-center justify-between gap-4 w-full">
+          <div className="flex items-center px-4 py-2 xl:px-6 xl:py-2.5">
+            <div className="flex w-full min-w-0 items-center justify-between gap-3 xl:gap-4">
               {/* 左侧控制按钮 */}
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-2 xl:gap-3">
                 {/* 上一集按钮 */}
                 <button
                   onClick={onPlayPreviousEpisode}
                   disabled={!canPlayPreviousEpisode}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100 xl:h-9 xl:w-9"
                   title="上一集"
                   aria-label="上一集"
                 >
-                  <SkipBack className="w-5 h-5 text-white/85" />
+                  <SkipBack className="h-4.5 w-4.5 text-white/85 xl:h-5 xl:w-5" />
                 </button>
 
                 {/* 播放/暂停按钮 */}
                 <button
                   onClick={handlePlayButtonClick}
-                  className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-10 xl:w-10"
                 >
                   {isPlaying ? (
-                    <Pause className="w-6 h-6 text-white" fill="currentColor" />
+                    <Pause className="h-5 w-5 text-white xl:h-6 xl:w-6" fill="currentColor" />
                   ) : (
-                    <Play className="w-6 h-6 text-white ml-0.5" fill="currentColor" />
+                    <Play className="ml-0.5 h-5 w-5 text-white xl:h-6 xl:w-6" fill="currentColor" />
                   )}
                 </button>
 
@@ -1494,41 +1505,41 @@ export function VideoPlayer({
                 <button
                   onClick={onPlayNextEpisode}
                   disabled={!canPlayNextEpisode}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:scale-100 xl:h-9 xl:w-9"
                   title="下一集"
                   aria-label="下一集"
                 >
-                  <SkipForward className="w-5 h-5 text-white/85" />
+                  <SkipForward className="h-4.5 w-4.5 text-white/85 xl:h-5 xl:w-5" />
                 </button>
 
                 {/* 快退按钮 */}
                 <button
                   onClick={handleSkipBackward}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-9 xl:w-9"
                   title="后退 10 秒"
                 >
-                  <RotateCcw className="w-5 h-5 text-white/85" />
+                  <RotateCcw className="h-4.5 w-4.5 text-white/85 xl:h-5 xl:w-5" />
                 </button>
 
                 {/* 快进按钮 */}
                 <button
                   onClick={handleSkipForward}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-9 xl:w-9"
                   title="前进 10 秒"
                 >
-                  <RotateCw className="w-5 h-5 text-white/85" />
+                  <RotateCw className="h-4.5 w-4.5 text-white/85 xl:h-5 xl:w-5" />
                 </button>
 
                 {/* 音量控制 */}
                 <div className="flex items-center gap-2 group">
                   <button
                     onClick={toggleMute}
-                    className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
+                    className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-9 xl:w-9"
                   >
                     {isMuted || volume === 0 ? (
-                      <VolumeX className="w-5 h-5 text-white/85" />
+                      <VolumeX className="h-4.5 w-4.5 text-white/85 xl:h-5 xl:w-5" />
                     ) : (
-                      <Volume2 className="w-5 h-5 text-white/85" />
+                      <Volume2 className="h-4.5 w-4.5 text-white/85 xl:h-5 xl:w-5" />
                     )}
                   </button>
 
@@ -1562,25 +1573,25 @@ export function VideoPlayer({
                 </div>
 
                 {/* 时间显示 */}
-                <div className="text-white/80 text-sm font-medium ml-2 tracking-tight tabular-nums">
+                <div className="ml-1 flex-shrink-0 whitespace-nowrap text-[11px] font-medium tracking-tight tabular-nums text-white/80 xl:ml-2 xl:text-sm">
                   {formatTime(currentTime)} / {formatTime(duration)}
                 </div>
               </div>
               {/* 右侧控制按钮 */}
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-1.5 xl:gap-2">
                 {/* 弹幕来源搜索框 - 弹幕关闭时禁用 */}
                 <button
                   ref={danmakuSelectorButtonRef}
                   onClick={() => setShowDanmakuSelector(true)}
                   disabled={!danmakuSettings.enabled}
-                  className={`flex items-center gap-2 px-3 h-9 rounded-full transition-all duration-200 hover:bg-white/[0.1] bg-white/[0.05] min-w-[200px] max-w-[280px] ${
+                  className={`flex h-8 min-w-[120px] max-w-[160px] items-center gap-2 rounded-full bg-white/[0.05] px-2.5 transition-all duration-200 hover:bg-white/[0.1] md:min-w-[140px] md:max-w-[200px] xl:h-9 xl:min-w-[180px] xl:max-w-[240px] xl:px-3 2xl:min-w-[200px] 2xl:max-w-[280px] ${
                     danmakuSettings.enabled ? 'text-white/85' : 'opacity-40 pointer-events-none'
                   }`}
                   title="点击选择弹幕来源"
                   aria-label="选择弹幕来源"
                 >
-                  <Search className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm truncate">
+                  <Search className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate text-xs xl:text-sm">
                     {getDanmakuSourceText()}
                   </span>
                 </button>
@@ -1588,7 +1599,7 @@ export function VideoPlayer({
                 {/* 弹幕切换按钮 */}
                 <button
                   onClick={toggleDanmaku}
-                  className="flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-white/[0.1] text-white/85"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-white/85 transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-9 xl:w-9"
                   title={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
                   aria-label={danmakuSettings.enabled ? '关闭弹幕' : '开启弹幕'}
                 >
@@ -1605,7 +1616,7 @@ export function VideoPlayer({
                   <button
                     ref={subtitleButtonRef}
                     onClick={() => setShowSubtitleMenu(!showSubtitleMenu)}
-                    className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 active:scale-95 xl:h-9 xl:w-9 ${
                       selectedSubtitleTrack >= 0 
                         ? 'bg-white/[0.2] text-white hover:bg-white/[0.25]' 
                         : 'hover:bg-white/[0.1] text-white/85'
@@ -1673,7 +1684,7 @@ export function VideoPlayer({
                   <button
                     ref={audioButtonRef}
                     onClick={() => setShowAudioMenu(!showAudioMenu)}
-                    className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95 text-white/85"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-white/85 transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-9 xl:w-9"
                     title="音轨设置"
                     aria-label="音轨设置"
                   >
@@ -1719,7 +1730,7 @@ export function VideoPlayer({
                 {/* 宽高比切换按钮 */}
                 <button
                   onClick={toggleAspectRatio}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-9 xl:w-9"
                   title={`宽高比: ${aspectRatioMode === 'auto' ? '自动适配' : '16:9'}`}
                 >
                   {aspectRatioMode === 'auto' ? (
@@ -1758,7 +1769,7 @@ export function VideoPlayer({
 
                 {/* 设置按钮 */}
                 <button
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="hidden h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:flex xl:h-9 xl:w-9"
                   title="设置"
                 >
                   <Settings className="w-5 h-5 text-white/85" />
@@ -1767,7 +1778,7 @@ export function VideoPlayer({
                 {/* 全屏按钮 */}
                 <button
                   onClick={toggleFullscreen}
-                  className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/[0.1] transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 hover:bg-white/[0.1] active:scale-95 xl:h-9 xl:w-9"
                   title={isFullscreen ? '退出全屏' : '全屏'}
                 >
                   {isFullscreen ? (
