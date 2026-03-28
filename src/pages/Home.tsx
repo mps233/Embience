@@ -21,6 +21,10 @@ import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MediaView, MediaItem } from '@/types/emby'
 
+const HOME_SECTION_GUTTER = 'px-4 sm:px-6 md:px-8 lg:px-10 xl:px-16 2xl:px-24'
+const HOME_HERO_LEFT_GUTTER = 'left-4 sm:left-6 md:left-8 lg:left-10 xl:left-16 2xl:left-24'
+const HOME_HERO_RIGHT_GUTTER = 'right-4 sm:right-6 md:right-8 lg:right-10 xl:right-16 2xl:right-24'
+
 /**
  * 主页组件
  * 
@@ -200,7 +204,7 @@ const ViewLatestSection = React.memo(function ViewLatestSection({
   }
 
   return (
-    <section className="px-16 sm:px-24 lg:px-64 py-12">
+    <section className={cn(HOME_SECTION_GUTTER, 'py-12')}>
       <div className="mb-8 flex items-center justify-between">
         <h2 className="text-3xl font-bold text-white">{view.name} - 最新</h2>
         {items.length > 0 && (
@@ -383,9 +387,9 @@ function HeroContent({ items, serverUrl, serverType, currentIndex, onIndexChange
   const logoUrl = getLogoUrl(currentItem)
 
   return (
-    <div className="relative h-[calc(100vh-5rem)] px-16 pb-12 pt-32 sm:px-24 lg:px-64">
+    <div className={cn('relative h-[calc(100vh-5rem)] pb-12 pt-32', HOME_SECTION_GUTTER)}>
       {/* 内容放在左下角 */}
-      <div className="absolute bottom-12 left-16 sm:left-24 lg:left-64 max-w-2xl space-y-4">
+      <div className={cn('absolute bottom-12 max-w-2xl space-y-4', HOME_HERO_LEFT_GUTTER)}>
         {/* 标题 - 优先显示 Logo，没有 Logo 时显示文字 */}
         {logoUrl ? (
           <img
@@ -474,7 +478,7 @@ function HeroContent({ items, serverUrl, serverType, currentIndex, onIndexChange
 
       {/* 底部缩略图轮播 */}
       {items.length > 1 && (
-        <div className="absolute bottom-12 right-16 sm:right-24 lg:right-64 flex gap-4">
+        <div className={cn('absolute bottom-12 flex gap-4', HOME_HERO_RIGHT_GUTTER)}>
           {items.map((item, index) => {
             const thumbUrl = item.imageTags?.Primary && serverUrl
               ? buildApiUrl(serverUrl, `/Items/${item.id}/Images/Primary`, serverType || 'emby', {
