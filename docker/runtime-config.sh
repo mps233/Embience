@@ -81,15 +81,18 @@ EOF
 fi
 
 cat > "$ASSRT_FILE_PROXY_CONFIG_PATH" <<'EOF'
-location ^~ /api/assrt/file {
+location ^~ /api/assrt/file/ {
   resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
   default_type application/octet-stream;
 
-  if ($arg_target = "") {
-    return 400 '{"message":"缺少 target 参数"}';
+  # 把路径中 /api/assrt/file/ 后面的部分作为目标 URL
+  # 前端传入格式: /api/assrt/file/https://file0.assrt.net/...
+  set $proxy_target $1$is_args$args;
+
+  if ($request_uri ~* "^/api/assrt/file/(.+)$") {
+    set $proxy_target $1;
   }
 
-  set $proxy_target $arg_target;
   proxy_ssl_server_name on;
   proxy_pass $proxy_target;
   proxy_set_header Host "";
