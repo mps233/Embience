@@ -13,6 +13,10 @@ export const CLIENT_NAME = runtimeConfig.clientName
 // API 配置
 export const DEFAULT_EMBY_SERVER_URL = runtimeConfig.embyServerUrl
 export const DANMAKU_API_URL = runtimeConfig.danmakuApiUrl
+export const ASSRT_ENABLED = runtimeConfig.assrtEnabled
+export const ASSRT_PROXY_URL = runtimeConfig.assrtProxyUrl
+export const OPENSUBTITLES_ENABLED = runtimeConfig.openSubtitlesEnabled
+export const OPENSUBTITLES_PROXY_URL = runtimeConfig.openSubtitlesProxyUrl
 
 export function getDanmakuApiUrl(): string {
   return getStorageItem<string>(STORAGE_KEYS.DANMAKU_SERVER_URL) || DANMAKU_API_URL

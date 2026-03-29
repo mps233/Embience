@@ -334,3 +334,40 @@ video::-ms-media-controls {
   backdrop-filter: blur(10px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
+
+/* 原生与 Video.js 字幕样式 */
+.video-js ::cue {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: #fff !important;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.82),
+    0 1px 4px rgba(0, 0, 0, 0.72),
+    0 0 8px rgba(0, 0, 0, 0.42) !important;
+}
+
+.video-js video::cue {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: #fff !important;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.82),
+    0 1px 4px rgba(0, 0, 0, 0.72),
+    0 0 8px rgba(0, 0, 0, 0.42) !important;
+}
+
+.video-js .vjs-text-track-display,
+.video-js .vjs-text-track-display div,
+.video-js .vjs-text-track-display span {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.82),
+    0 1px 4px rgba(0, 0, 0, 0.72),
+    0 0 8px rgba(0, 0, 0, 0.42) !important;
+}
+
+.video-js .vjs-text-track-display {
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.38));
+}

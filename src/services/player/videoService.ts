@@ -34,6 +34,40 @@ type AudioCompatibilityResult = {
   maxAudioChannels: number
 }
 
+type EmbyTextTrack = TextTrack & {
+  _embyStreamIndex?: number
+}
+
+type EmbyTextTrackCue = TextTrackCue & {
+  _embyOriginalStartTime?: number
+  _embyOriginalEndTime?: number
+}
+
+type MutableTextTrackCueTiming = {
+  startTime: number
+  endTime: number
+}
+
+type ManagedRemoteSubtitleTrack = {
+  handle: unknown
+  index?: number
+  objectUrl?: string
+  isCustom?: boolean
+  displayTitle?: string
+  language?: string
+  codec?: string
+}
+
+type LoadCustomSubtitleOptions = {
+  src: string
+  label: string
+  language?: string
+  codec?: string
+  objectUrl?: string
+}
+
+const CUSTOM_SUBTITLE_TRACK_INDEX_BASE = 100000
+
 /**
  * 视频服务类
  */
@@ -44,6 +78,10 @@ export class VideoService {
   private currentMediaSource: MediaSource | null = null
   private currentAudioStreamIndex: number | undefined
   private currentSubtitleStreamIndex: number | undefined
+  private managedRemoteSubtitleTracks: ManagedRemoteSubtitleTrack[] = []
+  private subtitleDelaySeconds = 0
+  private subtitleDelayRetryTimer: number | null = null
+  private subtitleDelayRetryAttempts = 0
   private serverUrl: string
   private accessToken: string
   private serverType: MediaServerType
@@ -1036,6 +1074,12 @@ export class VideoService {
       player.on('error', handleError)
     })
 
+    this.syncExternalSubtitleTracks(source.type)
+    this.applySubtitleTrackSelection(
+      options.subtitleStreamIndex !== undefined ? options.subtitleStreamIndex : -1
+    )
+    this.applySubtitleDelayToTracks()
+
     // 设置初始播放位置
     if (options.startPositionTicks) {
       const startSeconds = options.startPositionTicks / 10000000
@@ -1504,8 +1548,20 @@ export class VideoService {
           deliveryUrl: stream.deliveryUrl,
         })) || []
 
+    const customTracks: SubtitleTrack[] = this.managedRemoteSubtitleTracks
+      .filter((track) => track.isCustom && typeof track.index === 'number')
+      .map((track) => ({
+        index: track.index as number,
+        displayTitle:
+          track.displayTitle || this.buildSubtitleTrackTitle(track.index as number, track.language),
+        language: track.language,
+        codec: track.codec || 'vtt',
+        isExternal: true,
+        isTextSubtitleStream: true,
+      }))
+
     if (mediaSourceTracks.length > 0) {
-      return mediaSourceTracks
+      return [...mediaSourceTracks, ...customTracks]
     }
 
     if (!this.player) {
@@ -1521,11 +1577,19 @@ export class VideoService {
     for (let i = 0; i < textTracks.length; i++) {
       const track = (textTracks as any)[i]
       if (track && (track.kind === 'subtitles' || track.kind === 'captions')) {
+        const customTrack = this.managedRemoteSubtitleTracks.find(
+          (item) => item.isCustom && item.index === track._embyStreamIndex
+        )
         tracks.push({
-          index: i,
-          displayTitle: track.label || this.buildSubtitleTrackTitle(i, track.language),
-          language: track.language,
-          codec: '',
+          index:
+            typeof track._embyStreamIndex === 'number' ? track._embyStreamIndex : i,
+          displayTitle:
+            customTrack?.displayTitle ||
+            track.label ||
+            this.buildSubtitleTrackTitle(i, track.language),
+          language: customTrack?.language || track.language,
+          codec: customTrack?.codec || '',
+          isExternal: customTrack?.isCustom ? true : undefined,
           isTextSubtitleStream: true,
         })
       }
@@ -1571,15 +1635,49 @@ export class VideoService {
       return
     }
 
+    this.applySubtitleTrackSelection(index)
+    this.applySubtitleDelayToTracks()
+  }
+
+  setSubtitleDelay(seconds: number): number {
+    this.subtitleDelaySeconds = this.normalizeSubtitleDelay(seconds)
+    this.applySubtitleDelayToTracks()
+    return this.subtitleDelaySeconds
+  }
+
+  adjustSubtitleDelay(deltaSeconds: number): number {
+    return this.setSubtitleDelay(this.subtitleDelaySeconds + deltaSeconds)
+  }
+
+  resetSubtitleDelay(): number {
+    return this.setSubtitleDelay(0)
+  }
+
+  getSubtitleDelay(): number {
+    return this.subtitleDelaySeconds
+  }
+
+  private applySubtitleTrackSelection(index: number): void {
+    if (!this.player) {
+      return
+    }
+
     const textTracks = this.player.textTracks?.()
     if (!textTracks) {
       return
     }
 
+    let fallbackTrackIndex = 0
     for (let i = 0; i < textTracks.length; i++) {
-      const track = (textTracks as any)[i]
+      const track = (textTracks as any)[i] as EmbyTextTrack | undefined
       if (track && (track.kind === 'subtitles' || track.kind === 'captions')) {
-        track.mode = i === index ? 'showing' : 'hidden'
+        const streamIndex =
+          typeof track._embyStreamIndex === 'number'
+            ? track._embyStreamIndex
+            : fallbackTrackIndex
+
+        track.mode = index >= 0 && streamIndex === index ? 'showing' : 'hidden'
+        fallbackTrackIndex += 1
       }
     }
   }
@@ -1610,6 +1708,273 @@ export class VideoService {
     }
 
     return `字幕 ${index + 1}`
+  }
+
+  isCustomSubtitleTrackIndex(index: number): boolean {
+    return index >= CUSTOM_SUBTITLE_TRACK_INDEX_BASE
+  }
+
+  private getNextCustomSubtitleTrackIndex(): number {
+    const currentCustomIndexes = this.managedRemoteSubtitleTracks
+      .filter((track) => track.isCustom && typeof track.index === 'number')
+      .map((track) => track.index as number)
+
+    if (currentCustomIndexes.length === 0) {
+      return CUSTOM_SUBTITLE_TRACK_INDEX_BASE
+    }
+
+    return Math.max(...currentCustomIndexes) + 1
+  }
+
+  async loadCustomSubtitleTrack(options: LoadCustomSubtitleOptions): Promise<number> {
+    if (!this.player) {
+      throw new Error('播放器尚未初始化，无法应用外挂字幕')
+    }
+
+    const trackIndex = this.getNextCustomSubtitleTrackIndex()
+    const remoteTrack = (this.player as any).addRemoteTextTrack(
+      {
+        kind: 'subtitles',
+        src: options.src,
+        srclang: options.language || 'und',
+        label: options.label,
+        default: true,
+      },
+      false
+    )
+
+    const track = remoteTrack?.track || remoteTrack
+    const element = remoteTrack?.el || remoteTrack
+
+    if (track) {
+      track._embyStreamIndex = trackIndex
+    }
+
+    if (element?.setAttribute) {
+      element.setAttribute('data-emby-managed-subtitle', 'true')
+      element.setAttribute('data-emby-custom-subtitle', 'true')
+      element.setAttribute('data-emby-stream-index', String(trackIndex))
+    }
+
+    this.managedRemoteSubtitleTracks.push({
+      handle: element,
+      index: trackIndex,
+      objectUrl: options.objectUrl,
+      isCustom: true,
+      displayTitle: options.label,
+      language: options.language,
+      codec: options.codec,
+    })
+
+    this.currentSubtitleStreamIndex = trackIndex
+    this.applySubtitleTrackSelection(trackIndex)
+    this.scheduleSubtitleDelayReapply()
+
+    return trackIndex
+  }
+
+  private syncExternalSubtitleTracks(sourceType: string): void {
+    if (!this.player || !this.currentMediaSource) {
+      return
+    }
+
+    const externalTextSubtitles =
+      this.currentMediaSource.mediaStreams?.filter(
+        (stream) =>
+          stream.type === 'Subtitle' &&
+          stream.isExternal !== false &&
+          stream.isTextSubtitleStream !== false &&
+          !!stream.deliveryUrl
+      ) || []
+
+    this.clearManagedRemoteSubtitleTracks()
+
+    if (externalTextSubtitles.length === 0) {
+      return
+    }
+
+    const existingTextTrackCount = this.player.textTracks?.()?.length || 0
+    if (sourceType === 'application/x-mpegURL' && existingTextTrackCount > 0) {
+      this.logInfo('字幕', '检测到 HLS 已提供字幕轨，跳过外挂字幕重复挂载', {
+        existingTextTrackCount,
+      })
+      return
+    }
+
+    externalTextSubtitles.forEach((stream) => {
+      const subtitleUrl = this.buildSubtitleDeliveryUrl(stream.deliveryUrl!, stream.codec)
+      const remoteTrack = (this.player as any).addRemoteTextTrack(
+        {
+          kind: 'subtitles',
+          src: subtitleUrl,
+          srclang: stream.language || 'und',
+          label:
+            stream.displayTitle || this.buildSubtitleTrackTitle(stream.index, stream.language),
+          default: stream.index === this.currentSubtitleStreamIndex,
+        },
+        false
+      )
+
+      const track = remoteTrack?.track || remoteTrack
+      const element = remoteTrack?.el || remoteTrack
+
+      if (track) {
+        track._embyStreamIndex = stream.index
+      }
+
+      if (element?.setAttribute) {
+        element.setAttribute('data-emby-managed-subtitle', 'true')
+        element.setAttribute('data-emby-stream-index', String(stream.index))
+      }
+
+      this.managedRemoteSubtitleTracks.push({
+        handle: element,
+        index: stream.index,
+        isCustom: false,
+        displayTitle:
+          stream.displayTitle || this.buildSubtitleTrackTitle(stream.index, stream.language),
+        language: stream.language,
+        codec: stream.codec,
+      })
+    })
+
+    this.scheduleSubtitleDelayReapply()
+  }
+
+  private clearManagedRemoteSubtitleTracks(): void {
+    this.clearSubtitleDelayRetryTimer()
+    this.subtitleDelayRetryAttempts = 0
+
+    if (!this.player || this.managedRemoteSubtitleTracks.length === 0) {
+      this.managedRemoteSubtitleTracks = []
+      return
+    }
+
+    this.managedRemoteSubtitleTracks.forEach((track) => {
+      try {
+        ;(this.player as any).removeRemoteTextTrack(track.handle)
+      } catch (error) {
+        this.logWarn('字幕', '移除外挂字幕轨失败', error)
+      }
+
+      if (track.objectUrl) {
+        URL.revokeObjectURL(track.objectUrl)
+      }
+    })
+
+    this.managedRemoteSubtitleTracks = []
+  }
+
+  private buildSubtitleDeliveryUrl(deliveryUrl: string, codec?: string): string {
+    const baseUrl = this.getBaseUrl()
+    const url = new URL(deliveryUrl, `${baseUrl}/`)
+    const tokenParams = getCompatibleTokenQueryParams(this.getApiKey())
+
+    if (!url.searchParams.has('api_key')) {
+      url.searchParams.set('api_key', tokenParams.api_key)
+    }
+
+    if (!url.searchParams.has('ApiKey')) {
+      url.searchParams.set('ApiKey', tokenParams.ApiKey)
+    }
+
+    const normalizedCodec = codec?.trim().toLowerCase()
+    if (
+      normalizedCodec &&
+      ['srt', 'ass', 'ssa'].includes(normalizedCodec) &&
+      !url.pathname.toLowerCase().endsWith('.vtt')
+    ) {
+      url.pathname = url.pathname.replace(/\.(srt|ass|ssa)$/i, '.vtt')
+    }
+
+    return url.toString()
+  }
+
+  private normalizeSubtitleDelay(seconds: number): number {
+    return Number(seconds.toFixed(1))
+  }
+
+  private scheduleSubtitleDelayReapply(delayMs = 350): void {
+    if (this.subtitleDelayRetryAttempts >= 8) {
+      return
+    }
+
+    this.clearSubtitleDelayRetryTimer()
+    this.subtitleDelayRetryAttempts += 1
+
+    this.subtitleDelayRetryTimer = window.setTimeout(() => {
+      this.subtitleDelayRetryTimer = null
+      this.applySubtitleDelayToTracks()
+    }, delayMs)
+  }
+
+  private clearSubtitleDelayRetryTimer(): void {
+    if (this.subtitleDelayRetryTimer !== null) {
+      window.clearTimeout(this.subtitleDelayRetryTimer)
+      this.subtitleDelayRetryTimer = null
+    }
+  }
+
+  private applySubtitleDelayToTracks(): void {
+    if (!this.player) {
+      return
+    }
+
+    const textTracks = this.player.textTracks?.()
+    if (!textTracks) {
+      return
+    }
+
+    let shouldRetry = false
+
+    for (let i = 0; i < textTracks.length; i++) {
+      const track = (textTracks as any)[i] as TextTrack | undefined
+      if (!track || (track.kind !== 'subtitles' && track.kind !== 'captions')) {
+        continue
+      }
+
+      const cues = track.cues
+      if (!cues || cues.length === 0) {
+        shouldRetry = true
+        continue
+      }
+
+      for (let cueIndex = 0; cueIndex < cues.length; cueIndex++) {
+        const cue = cues[cueIndex] as EmbyTextTrackCue | null
+        if (!cue) {
+          continue
+        }
+
+        if (typeof cue._embyOriginalStartTime !== 'number') {
+          cue._embyOriginalStartTime = cue.startTime
+        }
+
+        if (typeof cue._embyOriginalEndTime !== 'number') {
+          cue._embyOriginalEndTime = cue.endTime
+        }
+
+        const nextStartTime = Math.max(0, cue._embyOriginalStartTime + this.subtitleDelaySeconds)
+        const nextEndTime = Math.max(
+          nextStartTime,
+          cue._embyOriginalEndTime + this.subtitleDelaySeconds
+        )
+
+        try {
+          const mutableCue = cue as unknown as MutableTextTrackCueTiming
+          mutableCue.startTime = nextStartTime
+          mutableCue.endTime = nextEndTime
+        } catch (error) {
+          this.logWarn('字幕', '字幕时间偏移应用失败', error)
+        }
+      }
+    }
+
+    if (shouldRetry) {
+      this.scheduleSubtitleDelayReapply()
+      return
+    }
+
+    this.subtitleDelayRetryAttempts = 0
   }
 
   /**
@@ -1715,6 +2080,8 @@ export class VideoService {
    * 销毁播放器实例
    */
   dispose(): void {
+    this.clearManagedRemoteSubtitleTracks()
+    this.clearSubtitleDelayRetryTimer()
     if (this.player) {
       this.player.dispose()
       this.player = null
@@ -1724,6 +2091,8 @@ export class VideoService {
     this.currentSubtitleStreamIndex = undefined
     this.currentPlayMethod = null
     this.lastError = null
+    this.subtitleDelaySeconds = 0
+    this.subtitleDelayRetryAttempts = 0
   }
 
   /**

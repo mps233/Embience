@@ -2,6 +2,8 @@
 
 基于 React + TypeScript 的 Emby/Jellyfin Web 客户端，当前重点覆盖媒体浏览、搜索、收藏和视频播放（含弹幕）。
 
+感谢大佬 [sheetung](https://github.com/sheetung) 提供的 GPT-5.4 支持。
+
 ## 当前功能（与代码一致）
 
 - 服务器配置：手动输入地址并自动探测 Emby/Jellyfin 类型

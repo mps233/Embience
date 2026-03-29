@@ -9,15 +9,21 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import './VideoPlayer.css'
 import type { MediaItem } from '@/types/emby'
 import type { PlaybackOptions, PlaybackProgressReport } from '@/types/player'
+import type { ResolvedAssrtSubtitle } from '@/types/assrt'
 import { createVideoService } from '@/services/player/videoService'
 import { createProgressTracker } from '@/services/player/progressTracker'
 import { createEmbyClient } from '@/services/api/embyClient'
+import {
+  convertSubtitleTextToVtt,
+  detectSubtitleFormat,
+} from '@/services/subtitles/subtitleFormatService'
 import { usePlayerStore } from '@/stores/playerStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useDanmakuStore } from '@/stores/danmakuStore'
 import { useDanmaku } from '@/hooks/useDanmaku'
 import { DanmakuCanvas, DanmakuSettings } from '@/components/danmaku'
 import DanmakuSelector from '@/components/danmaku/DanmakuSelector'
+import OpenSubtitlesSearchDialog from '@/components/player/OpenSubtitlesSearchDialog'
 import { 
   Play, 
   Pause, 
@@ -202,10 +208,12 @@ export function VideoPlayer({
   // 音轨和字幕索引（用于进度报告）
   const [selectedAudioTrack, setSelectedAudioTrack] = useState(0)
   const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState(-1)
+  const [subtitleDelaySeconds, setSubtitleDelaySeconds] = useState(0)
   
   // 字幕和音轨菜单显示状态
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false)
   const [showAudioMenu, setShowAudioMenu] = useState(false)
+  const [showSubtitleSearchDialog, setShowSubtitleSearchDialog] = useState(false)
   const subtitleMenuRef = useRef<HTMLDivElement>(null)
   const subtitleButtonRef = useRef<HTMLButtonElement>(null)
   const audioMenuRef = useRef<HTMLDivElement>(null)
@@ -303,10 +311,11 @@ export function VideoPlayer({
       playMethod: sessionInfo.playMethod as any,
       canSeek: true,
       audioStreamIndex: videoService.getCurrentAudioStreamIndex() ?? selectedAudioTrack,
-      subtitleStreamIndex:
+      subtitleStreamIndex: normalizeServerSubtitleTrackIndex(
         videoService.getCurrentSubtitleStreamIndex() ?? (
           selectedSubtitleTrack >= 0 ? selectedSubtitleTrack : undefined
-        ),
+        )
+      ),
       eventName,
     }
   }
@@ -355,6 +364,18 @@ export function VideoPlayer({
     ...overrides,
   })
 
+  const normalizeServerSubtitleTrackIndex = (streamIndex?: number): number | undefined => {
+    if (typeof streamIndex !== 'number' || streamIndex < 0) {
+      return undefined
+    }
+
+    if (videoServiceRef.current.isCustomSubtitleTrackIndex(streamIndex)) {
+      return undefined
+    }
+
+    return streamIndex
+  }
+
   const syncSelectedStreamsFromService = () => {
     const currentMediaSource = videoServiceRef.current.getCurrentMediaSource()
     const audioTracks = videoServiceRef.current.getAudioTracks()
@@ -374,6 +395,7 @@ export function VideoPlayer({
     setSelectedSubtitleTrack(
       typeof subtitleStreamIndex === 'number' ? subtitleStreamIndex : -1
     )
+    setSubtitleDelaySeconds(videoServiceRef.current.getSubtitleDelay())
 
     return {
       audioStreamIndex,
@@ -470,9 +492,7 @@ export function VideoPlayer({
           ...startReport,
           audioStreamIndex: streamSelection.audioStreamIndex,
           subtitleStreamIndex:
-            streamSelection.subtitleStreamIndex >= 0
-              ? streamSelection.subtitleStreamIndex
-              : undefined,
+            normalizeServerSubtitleTrackIndex(streamSelection.subtitleStreamIndex),
         })
         progressTimerRef.current = window.setInterval(() => {
           reportProgress('TimeUpdate')
@@ -497,6 +517,7 @@ export function VideoPlayer({
       accessToken || '',
       serverType || 'emby'
     )
+    setSubtitleDelaySeconds(videoServiceRef.current.getSubtitleDelay())
 
     const videoElement = videoRef.current
     const videoService = videoServiceRef.current
@@ -991,7 +1012,7 @@ export function VideoPlayer({
         {
           startPositionTicks: currentPositionTicks,
           audioStreamIndex: streamIndex,
-          subtitleStreamIndex: selectedSubtitleTrack,
+          subtitleStreamIndex: normalizeServerSubtitleTrackIndex(selectedSubtitleTrack),
         },
         {
           autoResume: shouldResumePlayback,
@@ -1013,6 +1034,22 @@ export function VideoPlayer({
       return
     }
 
+    if (streamIndex === -1 && videoServiceRef.current.isCustomSubtitleTrackIndex(selectedSubtitleTrack)) {
+      videoServiceRef.current.setSubtitleTrack(-1)
+      setSelectedSubtitleTrack(-1)
+      setShowSubtitleMenu(false)
+      await reportProgress('SubtitleTrackChange')
+      return
+    }
+
+    if (videoServiceRef.current.isCustomSubtitleTrackIndex(streamIndex)) {
+      videoServiceRef.current.setSubtitleTrack(streamIndex)
+      setSelectedSubtitleTrack(streamIndex)
+      setShowSubtitleMenu(false)
+      await reportProgress('SubtitleTrackChange')
+      return
+    }
+
     const videoService = videoServiceRef.current
     const currentPositionTicks = videoService.getCurrentPositionTicks()
     const shouldResumePlayback = isPlaying
@@ -1023,7 +1060,7 @@ export function VideoPlayer({
         {
           startPositionTicks: currentPositionTicks,
           audioStreamIndex: selectedAudioTrack,
-          subtitleStreamIndex: streamIndex,
+          subtitleStreamIndex: normalizeServerSubtitleTrackIndex(streamIndex),
         },
         {
           autoResume: shouldResumePlayback,
@@ -1037,6 +1074,83 @@ export function VideoPlayer({
       setError('切换字幕失败，请稍后重试')
     }
   }
+
+  const handleSubtitleDelayAdjust = (deltaSeconds: number) => {
+    const nextDelay = videoServiceRef.current.adjustSubtitleDelay(deltaSeconds)
+    setSubtitleDelaySeconds(nextDelay)
+  }
+
+  const handleSubtitleDelayReset = () => {
+    const nextDelay = videoServiceRef.current.resetSubtitleDelay()
+    setSubtitleDelaySeconds(nextDelay)
+  }
+
+  const decodeSubtitleBuffer = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer)
+    const encodings: Array<{ name: string; fatal?: boolean }> = [
+      { name: 'utf-8', fatal: true },
+      { name: 'utf-16le' },
+      { name: 'gb18030' },
+    ]
+
+    for (const encoding of encodings) {
+      try {
+        const decoder = new TextDecoder(encoding.name, { fatal: encoding.fatal })
+        const decodedText = decoder.decode(bytes)
+
+        if (!decodedText.includes('\uFFFD')) {
+          return decodedText
+        }
+      } catch {
+        continue
+      }
+    }
+
+    return new TextDecoder().decode(bytes)
+  }
+
+  const handleApplyOnlineSubtitle = async (subtitle: ResolvedAssrtSubtitle) => {
+    const preferredFile = subtitle.files.find((file) =>
+      ['vtt', 'srt', 'ass', 'ssa'].includes(file.format || '')
+    )
+
+    if (!preferredFile) {
+      throw new Error('这个字幕条目暂时没有可直接应用的文本字幕文件')
+    }
+
+    const subtitleFormat = detectSubtitleFormat(preferredFile.fileName)
+    if (!subtitleFormat) {
+      throw new Error('当前字幕格式暂不支持直接应用')
+    }
+
+    const response = await fetch(preferredFile.proxiedDownloadUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/plain,application/octet-stream,*/*',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`字幕文件获取失败：${response.status}`)
+    }
+
+    const subtitleBuffer = await response.arrayBuffer()
+    const subtitleText = decodeSubtitleBuffer(subtitleBuffer)
+    const vttContent = convertSubtitleTextToVtt(subtitleText, subtitleFormat)
+    const objectUrl = URL.createObjectURL(new Blob([vttContent], { type: 'text/vtt' }))
+    const appliedTrackIndex = await videoServiceRef.current.loadCustomSubtitleTrack({
+      src: objectUrl,
+      objectUrl,
+      label: `${subtitle.language} · ${preferredFile.fileName}`,
+      language: subtitle.language,
+      codec: 'vtt',
+    })
+
+    setSelectedSubtitleTrack(appliedTrackIndex)
+    setSubtitleDelaySeconds(videoServiceRef.current.getSubtitleDelay())
+    setError(null)
+  }
+
   // 获取可用的音轨列表
   const getAudioTracks = () => {
     const serviceTracks = videoServiceRef.current.getAudioTracks()
@@ -1092,6 +1206,10 @@ export function VideoPlayer({
 
     return parts.join(' · ')
   }
+
+  const subtitleTracks = getSubtitleTracks()
+  const hasSubtitleTracks = subtitleTracks.length > 0
+  const subtitleDelayLabel = `${subtitleDelaySeconds > 0 ? '+' : ''}${subtitleDelaySeconds.toFixed(1)}s`
 
   // 监听全屏变化
   useEffect(() => {
@@ -1639,6 +1757,53 @@ export function VideoPlayer({
                       }}
                     >
                       <div className="p-2">
+                        <button
+                          onClick={() => {
+                            setShowSubtitleMenu(false)
+                            setShowSubtitleSearchDialog(true)
+                          }}
+                          className="mb-1 flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-white/85 transition-colors hover:bg-white/[0.1] hover:text-white"
+                        >
+                          <span>搜索 ASSRT</span>
+                          <Search className="h-4 w-4" />
+                        </button>
+
+                        <div
+                          className="mb-2 rounded-md border px-3 py-2"
+                          style={{
+                            borderColor: 'rgba(255, 255, 255, 0.08)',
+                            backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                          }}
+                        >
+                          <div className="mb-2 flex items-center justify-between text-xs text-white/70">
+                            <span>字幕延迟</span>
+                            <span>{subtitleDelayLabel}</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              onClick={() => handleSubtitleDelayAdjust(-0.5)}
+                              disabled={!hasSubtitleTracks}
+                              className="rounded-md bg-white/[0.08] px-2 py-1.5 text-xs text-white transition-colors hover:bg-white/[0.14] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              -0.5s
+                            </button>
+                            <button
+                              onClick={handleSubtitleDelayReset}
+                              disabled={!hasSubtitleTracks}
+                              className="rounded-md bg-white/[0.08] px-2 py-1.5 text-xs text-white transition-colors hover:bg-white/[0.14] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              重置
+                            </button>
+                            <button
+                              onClick={() => handleSubtitleDelayAdjust(0.5)}
+                              disabled={!hasSubtitleTracks}
+                              className="rounded-md bg-white/[0.08] px-2 py-1.5 text-xs text-white transition-colors hover:bg-white/[0.14] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              +0.5s
+                            </button>
+                          </div>
+                        </div>
+
                         {/* 关闭字幕选项 */}
                         <button
                           onClick={() => handleSubtitleTrackChange(-1)}
@@ -1657,7 +1822,7 @@ export function VideoPlayer({
                         </button>
 
                         {/* 字幕轨道列表 */}
-                        {getSubtitleTracks().map((track, index) => (
+                        {subtitleTracks.map((track, index) => (
                           <button
                             key={track.index}
                             onClick={() => handleSubtitleTrackChange(track.index)}
@@ -1800,6 +1965,14 @@ export function VideoPlayer({
         onSelect={handleSelectDanmaku}
         defaultKeyword={mediaItem.seriesName || mediaItem.name}
         triggerRef={danmakuSelectorButtonRef}
+      />
+
+      <OpenSubtitlesSearchDialog
+        open={showSubtitleSearchDialog}
+        onOpenChange={setShowSubtitleSearchDialog}
+        mediaItem={mediaItem}
+        subtitleLanguagePreference={user?.configuration.subtitleLanguagePreference}
+        onApplySubtitle={handleApplyOnlineSubtitle}
       />
     </div>
   )
