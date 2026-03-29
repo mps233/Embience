@@ -85,19 +85,33 @@ location ^~ /api/assrt/file/ {
   resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
   default_type application/octet-stream;
 
-  # 把路径中 /api/assrt/file/ 后面的部分作为目标 URL
-  # 前端传入格式: /api/assrt/file/https://file0.assrt.net/...
-  set $proxy_target $1$is_args$args;
-
+  # 从路径中提取目标 URL（/api/assrt/file/ 后面的完整内容含查询参数）
   if ($request_uri ~* "^/api/assrt/file/(.+)$") {
     set $proxy_target $1;
   }
 
+  # 跟随重定向：把 3xx 响应的 Location 再次代理
   proxy_ssl_server_name on;
   proxy_pass $proxy_target;
   proxy_set_header Host "";
-  # 不跟随重定向，直接把 3xx 返回给前端，由前端决定如何处理
-  proxy_intercept_errors off;
+  proxy_set_header Referer "";
+
+  # 拦截 3xx，通过 error_page 跟随重定向
+  proxy_intercept_errors on;
+  error_page 301 302 307 308 = @assrt_file_redirect;
+
+  proxy_hide_header Access-Control-Allow-Origin;
+  proxy_hide_header Access-Control-Allow-Credentials;
+  add_header Access-Control-Allow-Origin * always;
+}
+
+location @assrt_file_redirect {
+  resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
+  set $redirect_target $upstream_http_location;
+  proxy_ssl_server_name on;
+  proxy_pass $redirect_target;
+  proxy_set_header Host "";
+  proxy_set_header Referer "";
   proxy_hide_header Access-Control-Allow-Origin;
   proxy_hide_header Access-Control-Allow-Credentials;
   add_header Access-Control-Allow-Origin * always;
