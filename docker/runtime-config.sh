@@ -81,10 +81,15 @@ EOF
 fi
 
 cat > "$ASSRT_FILE_PROXY_CONFIG_PATH" <<'EOF'
-location ~ ^/api/assrt/file/(https?)/([^/]+)/(.*)$ {
+location = /api/assrt/file {
   resolver 1.1.1.1 8.8.8.8 ipv6=off;
+
+  if ($arg_target = "") {
+    default_type application/json;
+    return 400 '{"message":"缺少 target 参数"}';
+  }
+
   proxy_ssl_server_name on;
-  proxy_set_header Host $2;
-  proxy_pass $1://$2/$3$is_args$args;
+  proxy_pass $arg_target;
 }
 EOF

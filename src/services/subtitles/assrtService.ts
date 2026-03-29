@@ -189,10 +189,10 @@ function detectAssrtSubtitleFileFormat(fileName?: string): string | undefined {
 }
 
 function buildAssrtFileProxyUrl(fileUrl: string): string {
-  const parsedUrl = new URL(fileUrl)
-  const protocol = parsedUrl.protocol.replace(':', '')
   const proxyBaseUrl = buildAssrtProxyBaseUrl()
-  return `${proxyBaseUrl}/file/${protocol}/${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`
+  const searchParams = new URLSearchParams()
+  searchParams.set('target', fileUrl)
+  return `${proxyBaseUrl}/file?${searchParams.toString()}`
 }
 
 function normalizeAssrtSubtitleFile(item: AssrtApiFile): AssrtSubtitleFile | null {

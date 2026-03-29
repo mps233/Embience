@@ -6,20 +6,19 @@ function createAssrtFileProxyPlugin() {
   return {
     name: 'assrt-file-proxy',
     configureServer(server: any) {
-      server.middlewares.use('/api/assrt/file', async (req: any, res: any, next: any) => {
-        const requestUrl = req.url || ''
-        const match = requestUrl.match(/^\/(https?)\/([^/]+)\/(.*)$/)
+      server.middlewares.use('/api/assrt/file', async (req: any, res: any) => {
+        const requestUrl = new URL(req.url || '/', 'http://localhost')
+        const targetUrl = requestUrl.searchParams.get('target')
 
-        if (!match) {
-          next()
+        if (!targetUrl) {
+          res.statusCode = 400
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ message: '缺少 target 参数' }))
           return
         }
 
-        const [, protocol, host, pathnameWithQuery] = match
-        const upstreamUrl = `${protocol}://${host}/${pathnameWithQuery}`
-
         try {
-          const upstreamResponse = await fetch(upstreamUrl, {
+          const upstreamResponse = await fetch(targetUrl, {
             method: 'GET',
             headers: {
               Accept: req.headers.accept || '*/*',
