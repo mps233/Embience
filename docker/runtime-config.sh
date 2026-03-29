@@ -83,9 +83,9 @@ fi
 cat > "$ASSRT_FILE_PROXY_CONFIG_PATH" <<'EOF'
 location = /api/assrt/file {
   resolver 1.1.1.1 8.8.8.8 ipv6=off;
+  default_type application/json;
 
   if ($arg_target = "") {
-    default_type application/json;
     return 400 '{"message":"缺少 target 参数"}';
   }
 
