@@ -85,18 +85,21 @@ location ^~ /api/assrt/file/ {
   resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
   default_type application/octet-stream;
 
-  # 从路径中提取目标 URL（/api/assrt/file/ 后面的完整内容含查询参数）
+  # 从原始 URI 中提取目标 URL（含查询参数）
+  # $request_uri 是未经 decode 的原始路径+查询串
   if ($request_uri ~* "^/api/assrt/file/(.+)$") {
     set $proxy_target $1;
   }
 
-  # 跟随重定向：把 3xx 响应的 Location 再次代理
+  # 清空当前请求的 args，防止 nginx 把 ?target=... 再追加到 proxy_pass URL 上
+  set $args "";
+
   proxy_ssl_server_name on;
   proxy_pass $proxy_target;
   proxy_set_header Host "";
   proxy_set_header Referer "";
 
-  # 拦截 3xx，通过 error_page 跟随重定向
+  # 跟随重定向
   proxy_intercept_errors on;
   error_page 301 302 307 308 = @assrt_file_redirect;
 
@@ -108,6 +111,7 @@ location ^~ /api/assrt/file/ {
 location @assrt_file_redirect {
   resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
   set $redirect_target $upstream_http_location;
+  set $args "";
   proxy_ssl_server_name on;
   proxy_pass $redirect_target;
   proxy_set_header Host "";
