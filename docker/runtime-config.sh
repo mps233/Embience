@@ -63,8 +63,8 @@ fi
 
 if [ -n "${ASSRT_TOKEN:-}" ]; then
   cat > "$ASSRT_PROXY_CONFIG_PATH" <<EOF
-location /api/assrt/ {
-  proxy_pass https://api.assrt.net/v1/;
+location /api/assrt/sub/ {
+  proxy_pass https://api.assrt.net/v1/sub/;
   proxy_ssl_server_name on;
   proxy_set_header Host api.assrt.net;
   proxy_set_header Authorization "Bearer $(escape_nginx "${ASSRT_TOKEN:-}")";
@@ -73,7 +73,7 @@ location /api/assrt/ {
 EOF
 else
   cat > "$ASSRT_PROXY_CONFIG_PATH" <<EOF
-location /api/assrt/ {
+location /api/assrt/sub/ {
   default_type application/json;
   return 503 '{"message":"ASSRT 代理未配置，请设置 ASSRT_TOKEN"}';
 }
@@ -81,15 +81,20 @@ EOF
 fi
 
 cat > "$ASSRT_FILE_PROXY_CONFIG_PATH" <<'EOF'
-location = /api/assrt/file {
-  resolver 1.1.1.1 8.8.8.8 ipv6=off;
-  default_type application/json;
+location ^~ /api/assrt/file {
+  resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
+  default_type application/octet-stream;
 
   if ($arg_target = "") {
+    default_type application/json;
     return 400 '{"message":"缺少 target 参数"}';
   }
 
+  set $proxy_target $arg_target;
   proxy_ssl_server_name on;
-  proxy_pass $arg_target;
+  proxy_pass $proxy_target;
+  proxy_set_header Host "";
+  proxy_hide_header Access-Control-Allow-Origin;
+  add_header Access-Control-Allow-Origin * always;
 }
 EOF
