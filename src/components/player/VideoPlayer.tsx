@@ -17,6 +17,7 @@ import {
   convertSubtitleTextToVtt,
   detectSubtitleFormat,
 } from '@/services/subtitles/subtitleFormatService'
+import { buildAssrtFileProxyUrl } from '@/services/subtitles/assrtService'
 import { usePlayerStore } from '@/stores/playerStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useDanmakuStore } from '@/stores/danmakuStore'
@@ -1123,12 +1124,28 @@ export function VideoPlayer({
       throw new Error('当前字幕格式暂不支持直接应用')
     }
 
-    const response = await fetch(preferredFile.proxiedDownloadUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'text/plain,application/octet-stream,*/*',
-      },
-    })
+    // 先尝试代理 URL，如果遇到重定向则把重定向目标再次走代理
+    const fetchViaProxy = async (url: string): Promise<Response> => {
+      const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: { Accept: 'text/plain,application/octet-stream,*/*' },
+      })
+      // 处理重定向：把新地址再次走代理
+      if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+        const location = response.headers.get('location')
+        if (location) {
+          const redirectProxyUrl = buildAssrtFileProxyUrl(location)
+          return fetch(redirectProxyUrl, {
+            method: 'GET',
+            headers: { Accept: 'text/plain,application/octet-stream,*/*' },
+          })
+        }
+      }
+      return response
+    }
+
+    const response = await fetchViaProxy(preferredFile.proxiedDownloadUrl)
 
     if (!response.ok) {
       throw new Error(`字幕文件获取失败：${response.status}`)

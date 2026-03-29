@@ -188,7 +188,7 @@ function detectAssrtSubtitleFileFormat(fileName?: string): string | undefined {
   return undefined
 }
 
-function buildAssrtFileProxyUrl(fileUrl: string): string {
+export function buildAssrtFileProxyUrl(fileUrl: string): string {
   const proxyBaseUrl = buildAssrtProxyBaseUrl()
   // 补全相对路径（assrt API 有时只返回路径部分）
   const fullUrl = fileUrl.startsWith('http') ? fileUrl : `http://file0.assrt.net${fileUrl}`

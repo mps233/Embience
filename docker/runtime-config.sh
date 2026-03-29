@@ -96,7 +96,10 @@ location ^~ /api/assrt/file/ {
   proxy_ssl_server_name on;
   proxy_pass $proxy_target;
   proxy_set_header Host "";
+  # 不跟随重定向，直接把 3xx 返回给前端，由前端决定如何处理
+  proxy_intercept_errors off;
   proxy_hide_header Access-Control-Allow-Origin;
+  proxy_hide_header Access-Control-Allow-Credentials;
   add_header Access-Control-Allow-Origin * always;
 }
 EOF
