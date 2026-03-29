@@ -1123,11 +1123,25 @@ export function VideoPlayer({
       throw new Error('当前字幕格式暂不支持直接应用')
     }
 
-    // nginx 层已处理重定向，直接 fetch 代理 URL
-    const response = await fetch(preferredFile.proxiedDownloadUrl, {
-      method: 'GET',
-      headers: { Accept: 'text/plain,application/octet-stream,*/*' },
-    })
+    // 优先直接请求 assrt 原始 URL（签名绑定请求 IP，nginx 代理会导致 IP 不匹配）
+    // 若 CORS 失败则回退走代理
+    const fetchSubtitleFile = async (): Promise<Response> => {
+      try {
+        const direct = await fetch(preferredFile.downloadUrl, {
+          method: 'GET',
+          headers: { Accept: 'text/plain,application/octet-stream,*/*' },
+        })
+        if (direct.ok) return direct
+      } catch {
+        // CORS 或网络错误，回退走代理
+      }
+      return fetch(preferredFile.proxiedDownloadUrl, {
+        method: 'GET',
+        headers: { Accept: 'text/plain,application/octet-stream,*/*' },
+      })
+    }
+
+    const response = await fetchSubtitleFile()
 
     if (!response.ok) {
       throw new Error(`字幕文件获取失败：${response.status}`)
