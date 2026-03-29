@@ -86,7 +86,6 @@ location ^~ /api/assrt/file {
   default_type application/octet-stream;
 
   if ($arg_target = "") {
-    default_type application/json;
     return 400 '{"message":"缺少 target 参数"}';
   }
 
