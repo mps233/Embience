@@ -86,18 +86,18 @@ location ^~ /api/assrt/file/ {
   default_type application/octet-stream;
 
   # 从原始 URI 中提取目标 URL（含查询参数）
-  # $request_uri 是未经 decode 的原始路径+查询串
   if ($request_uri ~* "^/api/assrt/file/(.+)$") {
     set $proxy_target $1;
   }
 
-  # 清空当前请求的 args，防止 nginx 把 ?target=... 再追加到 proxy_pass URL 上
+  # 清空当前请求的 args，防止 nginx 把查询参数再追加到 proxy_pass URL 上
   set $args "";
 
   proxy_ssl_server_name on;
   proxy_pass $proxy_target;
-  proxy_set_header Host "";
-  proxy_set_header Referer "";
+  proxy_set_header Host "file0.assrt.net";
+  proxy_set_header Referer "https://assrt.net/";
+  proxy_set_header User-Agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
   # 跟随重定向
   proxy_intercept_errors on;
@@ -115,7 +115,8 @@ location @assrt_file_redirect {
   proxy_ssl_server_name on;
   proxy_pass $redirect_target;
   proxy_set_header Host "";
-  proxy_set_header Referer "";
+  proxy_set_header Referer "https://assrt.net/";
+  proxy_set_header User-Agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
   proxy_hide_header Access-Control-Allow-Origin;
   proxy_hide_header Access-Control-Allow-Credentials;
   add_header Access-Control-Allow-Origin * always;
